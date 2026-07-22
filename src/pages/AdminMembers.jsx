@@ -7,15 +7,14 @@ const AdminMembers = () => {
   const navigate = useNavigate();
   const { members, setMembers, currentUser, families, familySettings, tasks, toggleTaskAssignment } = useFamily();
   const [managingTasksMemberId, setManagingTasksMemberId] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   if (!currentUser || currentUser.role !== 'admin') return null;
 
-  const familyObj = families.find(f => f.id === currentUser.familyId);
+  const familyObj = families ? families.find(f => f.id === currentUser.familyId) : null;
   const inviteCode = familyObj?.code || familySettings?.familyCode || 'HOM-RVS9';
   const inviteUrl = `${window.location.origin}${window.location.pathname}#/family-setup?code=${inviteCode}`;
-
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(inviteCode);
