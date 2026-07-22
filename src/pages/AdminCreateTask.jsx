@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronUp, Sparkles, BookOpen } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Sparkles, BookOpen, Trash2 } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 import { PREDEFINED_TASKS } from '../utils/constants';
 
 const AdminCreateTask = () => {
   const navigate = useNavigate();
-  const { addTask, members, currentUser } = useFamily();
+  const { addTask, deleteTask, tasks, members, currentUser } = useFamily();
 
   // Form states
   const [title, setTitle] = useState('');
@@ -382,6 +382,51 @@ const AdminCreateTask = () => {
           Crear Tarea
         </button>
       </form>
+
+      {/* Existing Tasks Management / Deletion List */}
+      <div className="mt-8 mb-6">
+        <div className="text-label mb-3" style={{ fontWeight: 'bold' }}>Tareas en el Hogar ({tasks.length})</div>
+
+        {tasks.length === 0 ? (
+          <div className="card text-center" style={{ padding: '20px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No hay tareas creadas en el hogar.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {tasks.map(t => (
+              <div
+                key={t.id}
+                className="flex-between card card-flat"
+                style={{ padding: '12px 16px', border: '1.5px solid var(--border-light)' }}
+              >
+                <div className="flex-center gap-3">
+                  <span style={{ fontSize: '24px' }}>{t.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{t.title}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      ★ {t.points} pts · {t.frequency === 'daily' ? 'Diaria' : 'Semanal'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`¿Seguro que deseas eliminar la tarea "${t.title}"?`)) {
+                      deleteTask(t.id);
+                    }
+                  }}
+                  className="btn btn-icon btn-ghost"
+                  style={{ color: 'var(--error)' }}
+                  title="Borrar tarea"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

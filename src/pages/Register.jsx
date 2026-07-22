@@ -12,16 +12,16 @@ const Register = () => {
 
   const handleRegister = (e) => {
     e.preventDefault();
-    if (!name || !email) {
+    if (!name.trim() || !email.trim()) {
       setError('Por favor, completa todos los campos');
       return;
     }
 
-    const result = register(name, email, role);
-    if (result.success) {
-      navigate('/dashboard');
+    const result = register(name.trim(), email.trim(), role);
+    if (result && result.success) {
+      navigate('/family-setup');
     } else {
-      setError(result.message);
+      setError(result?.message || 'Error al crear la cuenta');
     }
   };
 

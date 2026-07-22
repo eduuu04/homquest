@@ -5,7 +5,7 @@ import { useFamily } from '../context/FamilyContext';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
-  const { tasks, currentUser, members } = useFamily();
+  const { tasks, currentUser, members, claimedRewards = [] } = useFamily();
 
   // Redirect if not admin
   if (!currentUser || currentUser.role !== 'admin') {
@@ -20,8 +20,9 @@ const AdminPanel = () => {
     );
   }
 
-  // Count verification requests
+  // Count verification requests and reward claims
   const pendingRequests = tasks.filter(t => t.status === 'sent').length;
+  const pendingRewards = claimedRewards.filter(c => c.status === 'pending').length;
 
   const menuItems = [
     {
@@ -30,6 +31,13 @@ const AdminPanel = () => {
       icon: '✅',
       badge: pendingRequests,
       onClick: () => navigate('/admin/verify')
+    },
+    {
+      title: 'Entregar Recompensas',
+      subtitle: `${pendingRewards} solicitudes de canje`,
+      icon: '🎁',
+      badge: pendingRewards,
+      onClick: () => navigate('/profile?tab=shop')
     },
     {
       title: 'Crear / Editar Tareas',

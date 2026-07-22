@@ -10,21 +10,21 @@ const Login = () => {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (!email) {
+    if (!email.trim()) {
       setError('Por favor, introduce tu email');
       return;
     }
-    const result = login(email);
-    if (result.success) {
+    const result = login(email.trim());
+    if (result && result.success) {
       navigate('/dashboard');
     } else {
-      setError(result.message);
+      setError(result?.message || 'Error al iniciar sesión');
     }
   };
 
   const handleQuickLogin = (emailAddress) => {
     const result = login(emailAddress);
-    if (result.success) {
+    if (result && result.success) {
       navigate('/dashboard');
     }
   };
@@ -59,46 +59,52 @@ const Login = () => {
           </button>
         </form>
 
-        <div className="divider" style={{ margin: '24px 0' }}></div>
+        {members.length > 0 && (
+          <>
+            <div className="divider" style={{ margin: '24px 0' }}></div>
 
-        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-          <span className="text-label" style={{ fontSize: '13px' }}>
-            ACCESO RÁPIDO (MODO DEMO/MOCK)
-          </span>
-        </div>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <span className="text-label" style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                👤 Perfiles de la Familia (Acceso Directo)
+              </span>
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {members.map(member => (
-            <button 
-              key={member.id}
-              onClick={() => handleQuickLogin(member.email)}
-              className="card card-flat"
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '12px', 
-                padding: '10px 14px', 
-                width: '100%',
-                textAlign: 'left',
-                border: '1.5px solid var(--border-light)',
-                borderRadius: '12px'
-              }}
-            >
-              <div className={`avatar avatar-md ${member.role === 'admin' ? 'avatar-admin' : ''}`}>
-                {member.avatar}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: '700', fontSize: '15px' }}>{member.name}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {member.role === 'admin' ? '👑 Administrador' : '👤 Miembro'}
-                </div>
-              </div>
-              <div className="badge badge-reward">
-                Lvl {member.level}
-              </div>
-            </button>
-          ))}
-        </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {members.map(member => (
+                <button
+                  key={member.id}
+                  onClick={() => handleQuickLogin(member.email)}
+                  className="card card-flat"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 14px',
+                    width: '100%',
+                    textAlign: 'left',
+                    border: '1.5px solid var(--border-light)',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div className={`avatar avatar-md ${member.role === 'admin' ? 'avatar-admin' : ''}`}>
+                    {member.avatar}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '700', fontSize: '15px' }}>{member.name}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {member.role === 'admin' ? '👑 Administrador/a' : '👤 Miembro del Hogar'}
+                    </div>
+                  </div>
+                  <div className="badge badge-reward">
+                    Nivel {member.level}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="auth-footer mt-6">

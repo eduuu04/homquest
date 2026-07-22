@@ -7,10 +7,13 @@ const TaskDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { tasks, currentUser, completeTask, members } = useFamily();
-  const [photoSelected, setPhotoSelected] = useState(false);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
+  const fileInputRef = React.useRef(null);
 
   const task = tasks.find(t => t.id === id);
 
@@ -27,20 +30,24 @@ const TaskDetail = () => {
 
   const assignedMembers = members.filter(m => task.assignedTo.includes(m.id));
 
-  const handleSimulatePhoto = () => {
-    setPhotoSelected(true);
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     setIsSubmitting(true);
-    // Simulate stock cleaning photo if required
-    const mockPhotoUrl = task.requiresPhoto 
-      ? 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=400'
-      : null;
+    setSubmitError('');
 
-    completeTask(task.id, mockPhotoUrl);
-
-    setTimeout(() => {
+    try {
+      await completeTask(task.id, photoFile || photoPreview, comment);
       setIsSubmitting(false);
       
       // If user is Admin and the task is auto-approvable (doesn't require other admin)
@@ -54,7 +61,11 @@ const TaskDetail = () => {
         // Just navigate back with a simple message
         navigate('/tasks');
       }
-    }, 1200);
+    } catch (error) {
+      console.error('No se pudo completar la tarea:', error);
+      setSubmitError('No se pudo enviar la tarea. Comprueba tu conexión e inténtalo de nuevo.');
+      setIsSubmitting(false);
+    }
   };
 
   const getDifficultyLabel = (diff) => {
@@ -183,41 +194,54 @@ const TaskDetail = () => {
           )}
 
           {task.requiresPhoto && (
-            <div className="card text-center mb-4" style={{ border: photoSelected ? '2px solid var(--success)' : '1.5px dashed var(--border)' }}>
-              {!photoSelected ? (
+            <div className="card text-center mb-4" style={{ border: photoPreview ? '2px solid var(--success)' : '1.5px dashed var(--border)' }}>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={fileInputRef}
+                onChange={handlePhotoSelect}
+                style={{ display: 'none' }}
+              />
+
+              {!photoPreview ? (
                 <div>
-                  <Camera size={36} color="var(--text-tertiary)" style={{ margin: '0 auto 12px' }} />
-                  <div style={{ fontWeight: '700', fontSize: '15px' }}>Sube una foto de verificación</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                    Esta tarea requiere foto para ser aprobada por el admin
+                  <Camera size={36} color="var(--primary)" style={{ margin: '0 auto 12px' }} />
+                  <div style={{ fontWeight: '700', fontSize: '15px' }}>Foto de verificación requerida</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                    Toma una foto con tu cámara o selecciona una imagen de tu dispositivo
                   </div>
                   <button 
                     type="button" 
-                    onClick={handleSimulatePhoto}
-                    className="btn btn-secondary btn-sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn btn-primary btn-sm"
+                    style={{ gap: '6px' }}
                   >
-                    Simular Cámara 📸
+                    <Camera size={16} /> Abrir Cámara / Galería 📸
                   </button>
                 </div>
               ) : (
                 <div style={{ position: 'relative' }}>
-                  <img 
-                    src="https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=400" 
-                    alt="Mock" 
-                    style={{ height: '140px', width: '100%', objectFit: 'cover', borderRadius: '12px' }}
+                  <img
+                    src={photoPreview}
+                    alt="Foto de verificación"
+                    style={{ maxHeight: '200px', width: '100%', objectFit: 'cover', borderRadius: '12px' }}
                   />
                   <div 
                     className="avatar avatar-sm flex-center"
-                    style={{ position: 'absolute', top: '8px', right: '8px', background: 'var(--success)' }}
+                    style={{ position: 'absolute', top: '8px', right: '8px', background: 'var(--success)', color: 'white' }}
                   >
                     <Check size={16} />
                   </div>
                   <button 
                     type="button" 
-                    onClick={() => setPhotoSelected(false)}
+                    onClick={() => {
+                      setPhotoFile(null);
+                      setPhotoPreview(null);
+                    }}
                     className="btn btn-danger btn-sm mt-2"
                   >
-                    Cambiar foto
+                    Cambiar o tomar otra foto
                   </button>
                 </div>
               )}
@@ -238,11 +262,16 @@ const TaskDetail = () => {
 
           <button 
             onClick={handleComplete}
-            disabled={isSubmitting || (task.requiresPhoto && !photoSelected)}
+            disabled={isSubmitting || (task.requiresPhoto && !photoPreview)}
             className="btn btn-success btn-lg mt-2"
           >
             {isSubmitting ? 'Enviando...' : 'Completar Tarea'}
           </button>
+          {submitError && (
+            <p role="alert" style={{ color: 'var(--error)', fontSize: '13px', marginTop: '10px', textAlign: 'center' }}>
+              {submitError}
+            </p>
+          )}
         </div>
       ) : (
         <div className="card text-center mt-6" style={{ padding: '24px' }}>

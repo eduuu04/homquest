@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Copy, UserPlus, Check, Trash2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Trash2, ClipboardList, Plus, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const AdminMembers = () => {
   const navigate = useNavigate();
-  const { members, setMembers, currentUser } = useFamily();
+  const { members, setMembers, currentUser, families, familySettings, tasks, toggleTaskAssignment } = useFamily();
   const [copied, setCopied] = useState(false);
-  const [inviteCode] = useState('HOM-X4K9');
+  const [managingTasksMemberId, setManagingTasksMemberId] = useState(null);
 
   if (!currentUser || currentUser.role !== 'admin') return null;
+
+  const familyObj = families.find(f => f.id === currentUser.familyId);
+  const inviteCode = familyObj?.code || familySettings?.familyCode || 'HOM-CODE';
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(inviteCode);
@@ -18,7 +21,6 @@ const AdminMembers = () => {
   };
 
   const handleToggleRole = (memberId) => {
-    // Cannot change your own role
     if (memberId === currentUser.id) return;
     
     setMembers(prev => prev.map(m => {
@@ -33,7 +35,6 @@ const AdminMembers = () => {
   };
 
   const handleDeleteMember = (memberId) => {
-    // Cannot delete yourself
     if (memberId === currentUser.id) return;
     
     if (window.confirm('¿Seguro que deseas eliminar a este miembro de la familia? Su historial se perderá.')) {
@@ -42,13 +43,13 @@ const AdminMembers = () => {
   };
 
   return (
-    <div className="page">
+    <div className="page" style={{ paddingBottom: '40px' }}>
       {/* Header */}
       <div className="page-header" style={{ paddingLeft: '0' }}>
         <button onClick={() => navigate('/admin')} className="btn btn-icon btn-ghost">
           <ArrowLeft size={24} />
         </button>
-        <h1 className="page-title" style={{ flex: 1, marginLeft: '12px' }}>Miembros</h1>
+        <h1 className="page-title" style={{ flex: 1, marginLeft: '12px' }}>Gestión de Miembros</h1>
       </div>
 
       {/* Invite Code card */}
@@ -77,59 +78,134 @@ const AdminMembers = () => {
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-        <div className="text-label" style={{ fontWeight: 'bold' }}>Integrantes de la casa</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+        <div className="text-label" style={{ fontWeight: 'bold' }}>Integrantes de la casa ({members.length})</div>
 
-        {members.map(member => (
-          <div 
-            key={member.id}
-            className="card"
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px', 
-              padding: '12px 16px',
-              border: '1.5px solid var(--border-light)',
-              transform: 'none'
-            }}
-          >
-            <div className={`avatar avatar-md ${member.role === 'admin' ? 'avatar-admin' : ''}`}>
-              {member.avatar}
+        {members.map(member => {
+          const assignedTasks = tasks.filter(t => t.assignedTo?.includes(member.id));
+          const isManagingTasks = managingTasksMemberId === member.id;
+
+          return (
+            <div
+              key={member.id}
+              className="card"
+              style={{
+                padding: '16px',
+                border: '1.5px solid var(--border-light)',
+                transform: 'none'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className={`avatar avatar-md ${member.role === 'admin' ? 'avatar-admin' : ''}`}>
+                  {member.avatar}
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: '800', fontSize: '15px' }}>
+                    {member.name} {member.id === currentUser.id && ' (Tú)'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {member.role === 'admin' ? '👑 Administrador/a' : '👤 Miembro del Hogar'} · Lvl {member.level}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 'bold', marginTop: '2px' }}>
+                    📋 {assignedTasks.length} tareas asignadas
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => setManagingTasksMemberId(isManagingTasks ? null : member.id)}
+                    className="btn btn-sm btn-secondary flex-center gap-1"
+                    style={{ fontSize: '12px', fontWeight: 'bold' }}
+                    title="Asignar o quitar tareas"
+                  >
+                    <ClipboardList size={14} /> Tareas {isManagingTasks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {member.id !== currentUser.id && (
+                    <>
+                      <button
+                        onClick={() => handleToggleRole(member.id)}
+                        className="btn btn-sm btn-ghost"
+                        title="Cambiar Rol"
+                        style={{ fontSize: '12px', padding: '6px' }}
+                      >
+                        {member.role === 'admin' ? '👤' : '👑'}
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteMember(member.id)}
+                        className="btn btn-icon btn-ghost"
+                        style={{ color: 'var(--error)' }}
+                        title="Eliminar Miembro"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Task Management Drawer per Member */}
+              {isManagingTasks && (
+                <div className="mt-4 pt-4 animate-in" style={{ borderTop: '1.5px dashed var(--border-light)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                    Asignar o Quitar Tareas a {member.name}:
+                  </div>
+
+                  {tasks.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      No hay tareas creadas en el hogar. Crea tareas desde el panel admin.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {tasks.map(t => {
+                        const isAssigned = t.assignedTo?.includes(member.id);
+                        return (
+                          <div
+                            key={t.id}
+                            className="flex-between card card-flat"
+                            style={{
+                              padding: '10px 14px',
+                              border: isAssigned ? '1.5px solid var(--primary-light)' : '1px solid var(--border-light)',
+                              background: isAssigned ? 'var(--primary-bg)' : 'var(--white)'
+                            }}
+                          >
+                            <div className="flex-center gap-2">
+                              <span style={{ fontSize: '20px' }}>{t.icon}</span>
+                              <div>
+                                <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{t.title}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                  ★ {t.points} pts · {t.frequency === 'daily' ? 'Diaria' : 'Semanal'}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => toggleTaskAssignment(t.id, member.id)}
+                              className={`btn btn-sm ${isAssigned ? 'btn-danger' : 'btn-success'} flex-center gap-1`}
+                              style={{ fontSize: '12px' }}
+                            >
+                              {isAssigned ? (
+                                <>
+                                  <Minus size={14} /> Quitar
+                                </>
+                              ) : (
+                                <>
+                                  <Plus size={14} /> Asignar
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: '800', fontSize: '15px' }}>
-                {member.name} {member.id === currentUser.id && ' (Tú)'}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                {member.role === 'admin' ? '👑 Administrador' : '👤 Miembro'} · Lvl {member.level}
-              </div>
-            </div>
-
-            {/* Actions for other members */}
-            {member.id !== currentUser.id && (
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  onClick={() => handleToggleRole(member.id)}
-                  className="btn btn-sm btn-secondary"
-                  title="Cambiar Rol"
-                  style={{ fontSize: '12px', fontWeight: 'bold' }}
-                >
-                  {member.role === 'admin' ? 'Hacer Miembro' : 'Hacer Admin'}
-                </button>
-                
-                <button
-                  onClick={() => handleDeleteMember(member.id)}
-                  className="btn btn-icon btn-ghost"
-                  style={{ color: 'var(--error)' }}
-                  title="Eliminar Miembro"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -51,7 +51,7 @@ const Dashboard = () => {
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 3600000);
+    const diffHours = Math.floor(diffMs / 3600000);
     
     if (diffMins < 1) return 'Ahora';
     if (diffMins < 60) return `${diffMins}m`;

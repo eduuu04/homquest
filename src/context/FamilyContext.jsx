@@ -15,6 +15,12 @@ const FamilyContext = createContext();
 
 export const useFamily = () => useContext(FamilyContext);
 
+const resetHomQuestStorage = () => {
+  Object.keys(localStorage)
+    .filter(key => key.startsWith('hq_'))
+    .forEach(key => localStorage.removeItem(key));
+};
+
 export const FamilyProvider = ({ children }) => {
   // Current user state persistent on device
   const [currentUser, setCurrentUser] = useState(() => {
@@ -24,18 +30,25 @@ export const FamilyProvider = ({ children }) => {
 
   // State entities stored local-first with Cloud sync
   const [families, setFamilies] = useState(() => {
+    if (!localStorage.getItem('hq_v3_clean')) {
+      resetHomQuestStorage();
+      localStorage.setItem('hq_v3_clean', 'true');
+      return [];
+    }
     const saved = localStorage.getItem('hq_families');
-    return saved ? JSON.parse(saved) : [{ id: 'f1', name: 'Los García', icon: '🏠', code: 'HOM-X4K9' }];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [members, setMembers] = useState(() => {
+    if (!localStorage.getItem('hq_v3_clean')) return [];
     const saved = localStorage.getItem('hq_members');
-    return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [tasks, setTasks] = useState(() => {
+    if (!localStorage.getItem('hq_v3_clean')) return [];
     const saved = localStorage.getItem('hq_tasks');
-    return saved ? JSON.parse(saved) : INITIAL_TASKS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [rewards, setRewards] = useState(() => {
@@ -59,8 +72,9 @@ export const FamilyProvider = ({ children }) => {
   });
 
   const [activityLog, setActivityLog] = useState(() => {
+    if (!localStorage.getItem('hq_v3_clean')) return [];
     const saved = localStorage.getItem('hq_activity_log');
-    return saved ? JSON.parse(saved) : INITIAL_ACTIVITY_LOG;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [familySettings, setFamilySettings] = useState(() => {
@@ -76,10 +90,15 @@ export const FamilyProvider = ({ children }) => {
   });
 
   const [notifications, setNotifications] = useState(() => {
+    if (!localStorage.getItem('hq_v3_clean')) return [];
     const saved = localStorage.getItem('hq_notifications');
-    return saved ? JSON.parse(saved) : [
-      { id: 'n1', title: '¡Bienvenido a HomQuest!', message: 'Comienza a organizar tu hogar de manera divertida.', read: false, date: new Date().toISOString() }
-    ];
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [claimedRewards, setClaimedRewards] = useState(() => {
+    if (!localStorage.getItem('hq_v3_clean')) return [];
+    const saved = localStorage.getItem('hq_claimed_rewards');
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Sync state changes to device localStorage for 100% offline resilience
@@ -98,26 +117,28 @@ export const FamilyProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem('hq_activity_log', JSON.stringify(activityLog)); }, [activityLog]);
   useEffect(() => { localStorage.setItem('hq_family_settings', JSON.stringify(familySettings)); }, [familySettings]);
   useEffect(() => { localStorage.setItem('hq_notifications', JSON.stringify(notifications)); }, [notifications]);
+  useEffect(() => { localStorage.setItem('hq_claimed_rewards', JSON.stringify(claimedRewards)); }, [claimedRewards]);
 
   // Auth
-  const login = async (email) => {
+  const login = (email) => {
     const found = members.find(m => m.email.toLowerCase() === email.toLowerCase().trim());
     if (found) {
       setCurrentUser(found);
       return { success: true, user: found };
     }
-    return { success: false, message: 'Usuario no encontrado' };
+    return { success: false, message: 'No existe ninguna cuenta con ese email en esta app.' };
   };
 
-  const register = async (name, email, role = 'member') => {
-    if (members.some(m => m.email.toLowerCase() === email.toLowerCase().trim())) {
-      return { success: false, message: 'El email ya está registrado' };
+  const register = (name, email, role = 'member') => {
+    const cleanEmail = email.toLowerCase().trim();
+    if (members.some(m => m.email.toLowerCase() === cleanEmail)) {
+      return { success: false, message: 'El email ya está registrado. Inicia sesión con él.' };
     }
 
     const newMember = {
       id: 'm_' + Date.now(),
       name,
-      email,
+      email: cleanEmail,
       role: role || 'member',
       avatar: name.substring(0, 2).toUpperCase(),
       level: 1,
@@ -160,7 +181,7 @@ export const FamilyProvider = ({ children }) => {
   };
 
   // Onboarding
-  const createFamily = async (name, icon) => {
+  const createFamily = (name, icon) => {
     const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     const newFamily = {
       id: 'f_' + Date.now(),
@@ -172,9 +193,12 @@ export const FamilyProvider = ({ children }) => {
     setFamilies(prev => [...prev, newFamily]);
 
     // Update member with familyId
-    const updatedUser = { ...currentUser, familyId: newFamily.id, role: 'admin' };
-    setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
-    setCurrentUser(updatedUser);
+    let updatedUser = null;
+    if (currentUser) {
+      updatedUser = { ...currentUser, familyId: newFamily.id, role: 'admin' };
+      setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
+      setCurrentUser(updatedUser);
+    }
 
     // Initialize clean family settings
     setFamilySettings({
@@ -186,19 +210,44 @@ export const FamilyProvider = ({ children }) => {
       autoApproveNoPhoto: false,
     });
 
+    // Seed initial recommended tasks for the new family
+    if (updatedUser) {
+      const starterTasks = PREDEFINED_TASKS.slice(0, 4).map((pt, idx) => ({
+        id: 't_seed_' + Date.now() + '_' + idx,
+        title: pt.title,
+        description: `Tarea inicial recomendada para el hogar`,
+        icon: pt.icon,
+        points: pt.points,
+        difficulty: pt.difficulty,
+        frequency: pt.frequency,
+        assignedTo: [updatedUser.id],
+        requiresPhoto: pt.difficulty === 'medium' || pt.difficulty === 'hard',
+        requiresAdminVerification: true,
+        status: 'pending',
+        completedBy: null,
+        completedAt: null,
+        photoUrl: null,
+        familyId: newFamily.id
+      }));
+
+      setTasks(prev => [...starterTasks, ...prev]);
+    }
+
     addNotification('Familia Creada', `¡Has creado la familia "${name}" con código ${newFamily.code}!`);
     return { success: true, family: newFamily };
   };
 
-  const joinFamily = async (code) => {
+  const joinFamily = (code) => {
     const foundFamily = families.find(f => f.code.toUpperCase() === code.toUpperCase().trim());
     if (!foundFamily) {
-      return { success: false, message: 'Código de familia inválido' };
+      return { success: false, message: 'Código de familia no encontrado.' };
     }
 
-    const updatedUser = { ...currentUser, familyId: foundFamily.id };
-    setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
-    setCurrentUser(updatedUser);
+    if (currentUser) {
+      const updatedUser = { ...currentUser, familyId: foundFamily.id };
+      setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
+      setCurrentUser(updatedUser);
+    }
 
     addNotification('Unido a Familia', `¡Te has unido a la familia "${foundFamily.name}"!`);
     return { success: true, family: foundFamily };
@@ -237,8 +286,27 @@ export const FamilyProvider = ({ children }) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updatedData } : t));
   };
 
-  const deleteTask = async (id) => {
+  const deleteTask = (id) => {
     setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const toggleTaskAssignment = (taskId, memberId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        const alreadyAssigned = t.assignedTo?.includes(memberId);
+        const newAssigned = alreadyAssigned
+          ? t.assignedTo.filter(id => id !== memberId)
+          : [...(t.assignedTo || []), memberId];
+        return { ...t, assignedTo: newAssigned };
+      }
+      return t;
+    }));
+  };
+
+  const updateUserAvatar = (avatar) => {
+    if (!currentUser) return;
+    setCurrentUser(prev => ({ ...prev, avatar }));
+    setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, avatar } : m));
   };
 
   // Complete Task (with Cloud Photo Upload!)
@@ -254,10 +322,12 @@ export const FamilyProvider = ({ children }) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
+    const completedByUserId = currentUser.id;
+
     const updatedTask = {
       ...task,
       status: 'sent',
-      completedBy: currentUser.id,
+      completedBy: completedByUserId,
       completedAt: new Date().toISOString(),
       photoUrl: finalPhotoUrl,
       comment: comment || ''
@@ -266,88 +336,97 @@ export const FamilyProvider = ({ children }) => {
     setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
 
     if (currentUser.role === 'admin' && !task.requireOtherAdmin) {
-      await approveTask(taskId, currentUser.id);
+      await approveTask(taskId, currentUser.id, completedByUserId);
     } else {
       addNotification('Tarea Completada', `${currentUser.name} completó "${task.title}". Pendiente de aprobación.`);
     }
   };
 
   // Approve Task (Auto-deletes photo from Cloud Storage!)
-  const approveTask = async (taskId, approvedByUserId) => {
+  const approveTask = async (taskId, approvedByUserId, completedByUserId = null) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // DIRECTIVE: Auto-delete photo from Cloud Server upon verification!
     if (task.photoUrl) {
       await cloudApi.deleteVerifiedPhoto(task.photoUrl);
     }
 
-    const coinsEarned = task.points;
-    const earnedXP = task.points;
-    const completedUser = members.find(m => m.id === task.completedBy);
+    const coinsEarned = Number(task.points || 0);
+    const earnedXP = Number(task.points || 0);
+    const targetUserId = completedByUserId || task.completedBy || currentUser?.id;
 
     setTasks(prev => prev.map(t => t.id === taskId ? {
       ...t,
       status: 'approved',
       approvedBy: approvedByUserId,
       approvedAt: new Date().toISOString(),
-      photoUrl: null // Clear photoUrl reference after auto-deletion!
+      photoUrl: null
     } : t));
 
-    if (completedUser) {
-      const newXP = completedUser.totalXP + earnedXP;
-      const newCoins = completedUser.coins + coinsEarned;
+    setMembers(prev => prev.map(m => {
+      if (m.id === targetUserId) {
+        const newXP = (m.totalXP || 0) + earnedXP;
+        const newCoins = (m.coins || 0) + coinsEarned;
+        const newWeekly = (m.weeklyPoints || 0) + coinsEarned;
+        const newMonthly = (m.monthlyPoints || 0) + coinsEarned;
+        const newStreak = (m.currentStreak || 0) + 1;
 
-      let newLvl = completedUser.level;
-      const sortedLevels = [...levels].sort((a, b) => b.level - a.level);
-      const reachedLevel = sortedLevels.find(l => newXP >= l.xpNeeded);
-      if (reachedLevel && reachedLevel.level > completedUser.level) {
-        newLvl = reachedLevel.level;
-        addNotification('¡Subida de nivel!', `🎉 ¡${completedUser.name} ha subido al nivel ${newLvl}: ${reachedLevel.title}!`);
+        let newLvl = m.level || 1;
+        const sortedLevels = [...levels].sort((a, b) => b.level - a.level);
+        const reachedLevel = sortedLevels.find(l => newXP >= l.xpNeeded);
+        if (reachedLevel && reachedLevel.level > newLvl) {
+          newLvl = reachedLevel.level;
+          addNotification('¡Subida de nivel!', `🎉 ¡${m.name} ha subido al nivel ${newLvl}: ${reachedLevel.title}!`);
+        }
 
-        setActivityLog(prev => [{
-          id: 'l_' + Date.now(),
-          type: 'level_up',
-          memberId: completedUser.id,
-          details: `Nivel ${newLvl}`,
-          pointsEarned: 0,
-          timestamp: new Date().toISOString()
-        }, ...prev]);
+        return {
+          ...m,
+          totalXP: newXP,
+          coins: newCoins,
+          level: newLvl,
+          currentStreak: newStreak,
+          weeklyPoints: newWeekly,
+          monthlyPoints: newMonthly
+        };
       }
+      return m;
+    }));
 
-      setMembers(prev => prev.map(m => m.id === completedUser.id ? {
-        ...m,
-        totalXP: newXP,
-        coins: newCoins,
-        level: newLvl,
-        currentStreak: m.currentStreak + 1,
-        weeklyPoints: m.weeklyPoints + coinsEarned,
-        monthlyPoints: m.monthlyPoints + coinsEarned
-      } : m));
+    if (currentUser && currentUser.id === targetUserId) {
+      setCurrentUser(prev => {
+        const newXP = (prev.totalXP || 0) + earnedXP;
+        const newCoins = (prev.coins || 0) + coinsEarned;
+        const newWeekly = (prev.weeklyPoints || 0) + coinsEarned;
+        const newMonthly = (prev.monthlyPoints || 0) + coinsEarned;
+        const newStreak = (prev.currentStreak || 0) + 1;
 
-      if (currentUser?.id === completedUser.id) {
-        setCurrentUser(prev => ({
+        let newLvl = prev.level || 1;
+        const sortedLevels = [...levels].sort((a, b) => b.level - a.level);
+        const reachedLevel = sortedLevels.find(l => newXP >= l.xpNeeded);
+        if (reachedLevel && reachedLevel.level > newLvl) {
+          newLvl = reachedLevel.level;
+        }
+
+        return {
           ...prev,
           totalXP: newXP,
           coins: newCoins,
           level: newLvl,
-          currentStreak: prev.currentStreak + 1,
-          weeklyPoints: prev.weeklyPoints + coinsEarned,
-          monthlyPoints: prev.monthlyPoints + coinsEarned
-        }));
-      }
-
-      setActivityLog(prev => [{
-        id: 'l_' + Date.now(),
-        type: 'task_completed',
-        memberId: completedUser.id,
-        details: task.title,
-        pointsEarned: coinsEarned,
-        timestamp: new Date().toISOString()
-      }, ...prev]);
-
-      checkAchievementsForUser(completedUser.id, newXP, completedUser.currentStreak + 1);
+          currentStreak: newStreak,
+          weeklyPoints: newWeekly,
+          monthlyPoints: newMonthly
+        };
+      });
     }
+
+    setActivityLog(prev => [{
+      id: 'l_' + Date.now(),
+      type: 'task_completed',
+      memberId: targetUserId,
+      details: task.title,
+      pointsEarned: coinsEarned,
+      timestamp: new Date().toISOString()
+    }, ...prev]);
   };
 
   const rejectTask = async (taskId, approvedByUserId, reason) => {
@@ -398,6 +477,20 @@ export const FamilyProvider = ({ children }) => {
 
     const updatedCoins = currentUser.coins - reward.cost;
 
+    const newClaim = {
+      id: 'claim_' + Date.now(),
+      rewardId: reward.id,
+      title: reward.title,
+      icon: reward.icon,
+      cost: reward.cost,
+      claimedBy: currentUser.id,
+      claimedAt: new Date().toISOString(),
+      status: 'pending', // pending, fulfilled
+      familyId: currentUser.familyId || null
+    };
+
+    setClaimedRewards(prev => [newClaim, ...prev]);
+
     setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, coins: updatedCoins } : m));
     setCurrentUser(prev => ({ ...prev, coins: updatedCoins }));
 
@@ -412,6 +505,16 @@ export const FamilyProvider = ({ children }) => {
 
     addNotification('Recompensa Canjeada', `🎁 ${currentUser.name} canjeó: "${reward.title}" (-${reward.cost}🪙)`);
     return { success: true, message: '¡Recompensa canjeada con éxito!' };
+  };
+
+  const fulfillRewardClaim = (claimId) => {
+    setClaimedRewards(prev => prev.map(c => c.id === claimId ? {
+      ...c,
+      status: 'fulfilled',
+      fulfilledAt: new Date().toISOString(),
+      fulfilledBy: currentUser?.id
+    } : c));
+    addNotification('Recompensa Entregada', `🎉 Se ha entregado la recompensa.`);
   };
 
   // Customizers
@@ -456,10 +559,14 @@ export const FamilyProvider = ({ children }) => {
       addTask,
       editTask,
       deleteTask,
+      toggleTaskAssignment,
+      updateUserAvatar,
       completeTask,
       approveTask,
       rejectTask,
       claimReward,
+      claimedRewards,
+      fulfillRewardClaim,
       addLevel,
       deleteLevel,
       editLevel,

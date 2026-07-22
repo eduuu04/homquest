@@ -18,25 +18,25 @@ const FamilySetup = () => {
 
   if (!currentUser) return null;
 
-  const handleCreate = async (e) => {
+  const handleCreate = (e) => {
     e.preventDefault();
     if (!familyName.trim()) return;
 
-    const res = await createFamily(familyName, familyIcon);
-    if (res.success) {
+    const res = createFamily(familyName.trim(), familyIcon);
+    if (res && res.success) {
       navigate('/dashboard');
     }
   };
 
-  const handleJoin = async (e) => {
+  const handleJoin = (e) => {
     e.preventDefault();
     if (!familyCode.trim()) return;
 
-    const res = await joinFamily(familyCode);
-    if (res.success) {
+    const res = joinFamily(familyCode.trim());
+    if (res && res.success) {
       navigate('/dashboard');
     } else {
-      setError(res.message);
+      setError(res?.message || 'Error al unirse a la familia');
     }
   };
 
@@ -189,7 +189,7 @@ const FamilySetup = () => {
                 style={{ fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center', fontSize: '18px' }}
               />
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px', textAlign: 'center' }}>
-                Prueba con <strong>HOM-X4K9</strong> para unirte a la familia demo.
+                Pide el código de 8 caracteres al administrador de tu hogar para vincular tu dispositivo.
               </div>
             </div>
 

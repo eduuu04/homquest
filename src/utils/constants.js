@@ -133,11 +133,10 @@ export const INITIAL_TASKS = [
     frequency: 'weekly',
     assignedTo: ['m1'], // Eduardo
     requiresPhoto: true,
-    requiresAdminVerification: true,
-    status: 'sent', // Eduardo ya la marcó con foto mock
-    completedBy: 'm1',
-    completedAt: new Date(Date.now() - 7200000).toISOString(),
-    photoUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=400'
+    status: 'pending',
+    completedBy: null,
+    completedAt: null,
+    photoUrl: null
   },
   {
     id: 't5',
