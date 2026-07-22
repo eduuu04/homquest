@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Copy, Check, Trash2, ClipboardList, Plus, Minus, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Trash2, ClipboardList, Plus, Minus, ChevronDown, ChevronUp, Link as LinkIcon, Share2 } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const AdminMembers = () => {
@@ -12,34 +12,18 @@ const AdminMembers = () => {
   if (!currentUser || currentUser.role !== 'admin') return null;
 
   const familyObj = families.find(f => f.id === currentUser.familyId);
-  const inviteCode = familyObj?.code || familySettings?.familyCode || 'HOM-CODE';
+  const inviteUrl = `${window.location.origin}${window.location.pathname}#/family-setup?code=${inviteCode}`;
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(inviteCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleToggleRole = (memberId) => {
-    if (memberId === currentUser.id) return;
-    
-    setMembers(prev => prev.map(m => {
-      if (m.id === memberId) {
-        return {
-          ...m,
-          role: m.role === 'admin' ? 'member' : 'admin'
-        };
-      }
-      return m;
-    }));
-  };
-
-  const handleDeleteMember = (memberId) => {
-    if (memberId === currentUser.id) return;
-    
-    if (window.confirm('¿Seguro que deseas eliminar a este miembro de la familia? Su historial se perderá.')) {
-      setMembers(prev => prev.filter(m => m.id !== memberId));
-    }
+  const handleShareWhatsApp = () => {
+    const text = encodeURIComponent(`¡Únete a nuestra familia en HomQuest!\n\n🔑 Código: ${inviteCode}\n👉 Enlace directo: ${inviteUrl}`);
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
   return (
@@ -52,30 +36,42 @@ const AdminMembers = () => {
         <h1 className="page-title" style={{ flex: 1, marginLeft: '12px' }}>Gestión de Miembros</h1>
       </div>
 
-      {/* Invite Code card */}
+      {/* Invite Code & Link Card */}
       <div className="card text-center mb-6" style={{ background: 'var(--primary-bg)', border: '1.5px solid var(--primary-light)', transform: 'none' }}>
-        <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--primary)' }}>CÓDIGO DE INVITACIÓN FAMILIAR</div>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          🏠 CÓDIGO E INVITACIÓN A LA FAMILIA
+        </div>
+        
         <div 
           className="text-display" 
           style={{ fontSize: '28px', color: 'var(--primary)', margin: '8px 0', letterSpacing: '2px', fontFamily: 'monospace' }}
         >
           {inviteCode}
         </div>
-        <button 
-          onClick={handleCopyCode}
-          className="btn btn-primary btn-sm flex-center gap-1"
-          style={{ margin: '0 auto' }}
-        >
-          {copied ? (
-            <>
-              <Check size={14} /> ¡Copiado!
-            </>
-          ) : (
-            <>
-              <Copy size={14} /> Copiar Código
-            </>
-          )}
-        </button>
+
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '12px' }}>
+          <button 
+            onClick={handleCopyCode}
+            className="btn btn-primary btn-sm flex-center gap-1"
+          >
+            {copied ? <><Check size={14} /> ¡Código Copiado!</> : <><Copy size={14} /> Copiar Código</>}
+          </button>
+
+          <button 
+            onClick={handleCopyLink}
+            className="btn btn-secondary btn-sm flex-center gap-1"
+          >
+            {copiedLink ? <><Check size={14} /> ¡Enlace Copiado!</> : <><LinkIcon size={14} /> Copiar Enlace Directo</>}
+          </button>
+
+          <button 
+            onClick={handleShareWhatsApp}
+            className="btn btn-success btn-sm flex-center gap-1"
+            style={{ background: '#25D366', color: '#fff', border: 'none' }}
+          >
+            <Share2 size={14} /> WhatsApp
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>

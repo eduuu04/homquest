@@ -143,7 +143,17 @@ export const FamilyProvider = ({ children }) => {
     }
   }, [autoLoginEnabled, members, currentUser]);
 
-  useEffect(() => { localStorage.setItem('hq_families', JSON.stringify(families)); }, [families]);
+  useEffect(() => { 
+    localStorage.setItem('hq_families', JSON.stringify(families)); 
+    try {
+      const existingStr = localStorage.getItem('hq_global_families');
+      const existing = existingStr ? JSON.parse(existingStr) : [];
+      const map = new Map();
+      existing.forEach(f => map.set(f.id, f));
+      families.forEach(f => map.set(f.id, f));
+      localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
+    } catch (e) {}
+  }, [families]);
   useEffect(() => { localStorage.setItem('hq_members', JSON.stringify(members)); }, [members]);
   useEffect(() => { localStorage.setItem('hq_tasks', JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem('hq_rewards', JSON.stringify(rewards)); }, [rewards]);
@@ -273,14 +283,52 @@ export const FamilyProvider = ({ children }) => {
     return { success: true, family: newFamily };
   };
 
-  const joinFamily = (code) => {
-    const foundFamily = families.find(f => f.code.toUpperCase() === code.toUpperCase().trim());
+  const joinFamily = (code, role = 'member') => {
+    if (!code || !code.trim()) {
+      return { success: false, message: 'Por favor, introduce un código de familia válido.' };
+    }
+
+    const cleanInput = code.trim().toLowerCase();
+
+    // 1. Search in current state families
+    let foundFamily = families.find(f => f.code && f.code.trim().toLowerCase() === cleanInput);
+
+    // 2. Search in global registry in localStorage (for cross-tab/device sync)
     if (!foundFamily) {
-      return { success: false, message: 'Código de familia no encontrado.' };
+      try {
+        const savedGlobal = localStorage.getItem('hq_global_families');
+        if (savedGlobal) {
+          const globalList = JSON.parse(savedGlobal);
+          foundFamily = globalList.find(f => f.code && f.code.trim().toLowerCase() === cleanInput);
+          if (foundFamily) {
+            setFamilies(prev => {
+              if (prev.some(f => f.id === foundFamily.id)) return prev;
+              return [...prev, foundFamily];
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Fallback demo check: default initial demo family HOM-RVS9
+    if (!foundFamily && cleanInput === 'hom-rvs9') {
+      foundFamily = { id: 'f1', name: 'Hogar RVS9', icon: '🏠', code: 'HOM-RVS9' };
+      setFamilies(prev => {
+        if (prev.some(f => f.id === foundFamily.id)) return prev;
+        return [...prev, foundFamily];
+      });
+    }
+
+    if (!foundFamily) {
+      return { success: false, message: `Código de familia "${code.trim()}" no encontrado. Comprueba las mayúsculas y minúsculas.` };
     }
 
     if (currentUser) {
-      const updatedUser = { ...currentUser, familyId: foundFamily.id };
+      const updatedUser = { 
+        ...currentUser, 
+        familyId: foundFamily.id,
+        role: role || currentUser.role || 'member'
+      };
       setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
       setCurrentUser(updatedUser);
     }

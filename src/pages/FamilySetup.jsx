@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFamily } from '../context/FamilyContext';
 import { Home, Link as LinkIcon, Sparkles } from 'lucide-react';
@@ -15,6 +15,17 @@ const FamilySetup = () => {
   // Join states
   const [familyCode, setFamilyCode] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    // Detect ?code=XYZ or ?join=XYZ in URL search or hash
+    const rawSearch = window.location.search || (window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '');
+    const searchParams = new URLSearchParams(rawSearch);
+    const codeParam = searchParams.get('code') || searchParams.get('join');
+    if (codeParam) {
+      setFamilyCode(codeParam.trim());
+      setMode('join');
+    }
+  }, []);
 
   if (!currentUser) return null;
 
@@ -177,14 +188,13 @@ const FamilySetup = () => {
               <label className="input-label">Introduce el Código</label>
               <input 
                 type="text"
-                placeholder="Ej: HOM-X4K9"
+                placeholder="Ej: HOM-RVS9"
                 className="input-field"
                 value={familyCode}
                 onChange={(e) => {
-                  setFamilyCode(e.target.value.toUpperCase());
+                  setFamilyCode(e.target.value);
                   setError('');
                 }}
-                maxLength={8}
                 required
                 style={{ fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center', fontSize: '18px' }}
               />
