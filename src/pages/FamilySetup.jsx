@@ -50,11 +50,12 @@ const FamilySetup = () => {
     }
   };
 
-  const handleJoin = (e) => {
+  const handleJoin = async (e) => {
     e.preventDefault();
     if (!familyCode.trim()) return;
 
-    const res = joinFamily(familyCode.trim());
+    setError('');
+    const res = await joinFamily(familyCode.trim());
     if (res && res.success) {
       navigate('/dashboard');
     } else {

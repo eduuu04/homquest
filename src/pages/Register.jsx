@@ -4,13 +4,13 @@ import { useFamily } from '../context/FamilyContext';
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register } = useFamily();
+  const { register, joinFamily, getPendingInviteCode } = useFamily();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('member'); // default
   const [error, setError] = useState('');
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) {
       setError('Por favor, completa todos los campos');
@@ -19,6 +19,16 @@ const Register = () => {
 
     const result = register(name.trim(), email.trim(), role);
     if (result && result.success) {
+      const pendingCode = getPendingInviteCode();
+      if (pendingCode) {
+        const joinRes = await joinFamily(pendingCode, role);
+        if (joinRes && joinRes.success) {
+          navigate('/dashboard');
+          return;
+        }
+        navigate(`/family-setup?code=${encodeURIComponent(pendingCode)}`);
+        return;
+      }
       navigate('/family-setup');
     } else {
       setError(result?.message || 'Error al crear la cuenta');

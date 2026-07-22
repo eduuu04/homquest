@@ -226,6 +226,30 @@ export const FamilyProvider = ({ children }) => {
     }, ...prev]);
   };
 
+  // Auto-capture invite code from URL on app load
+  const captureInviteCode = () => {
+    try {
+      const href = window.location.href;
+      let code = null;
+      if (href.includes('code=')) {
+        code = href.split('code=')[1].split('&')[0].split('#')[0];
+      } else if (href.includes('join=')) {
+        code = href.split('join=')[1].split('&')[0].split('#')[0];
+      }
+      if (code) {
+        const clean = decodeURIComponent(code).trim();
+        sessionStorage.setItem('hq_invite_code', clean);
+        localStorage.setItem('hq_invite_code', clean);
+        return clean;
+      }
+    } catch (e) {}
+    return sessionStorage.getItem('hq_invite_code') || localStorage.getItem('hq_invite_code') || null;
+  };
+
+  useEffect(() => {
+    captureInviteCode();
+  }, []);
+
   // Onboarding
   const createFamily = (name, icon) => {
     const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -237,6 +261,9 @@ export const FamilyProvider = ({ children }) => {
     };
 
     setFamilies(prev => [...prev, newFamily]);
+    
+    // Sync to 24/7 Cloud Database for multi-device joining
+    cloudApi.registerFamily(newFamily);
 
     // Update member with familyId
     let updatedUser = null;
@@ -299,7 +326,7 @@ export const FamilyProvider = ({ children }) => {
     }
   }, [currentUser, members]);
 
-  const joinFamily = (code, role = 'member') => {
+  const joinFamily = async (code, role = 'member') => {
     if (!code || !code.trim()) {
       return { success: false, message: 'Por favor, introduce un código de familia válido.' };
     }
@@ -326,7 +353,21 @@ export const FamilyProvider = ({ children }) => {
       } catch (e) {}
     }
 
-    // 3. Fallback demo check: default initial demo family HOM-RVS9
+    // 3. Search in 24/7 Cloud Database for multi-device joining
+    if (!foundFamily) {
+      try {
+        const cloudFamily = await cloudApi.fetchFamilyByCode(cleanInput);
+        if (cloudFamily) {
+          foundFamily = cloudFamily;
+          setFamilies(prev => {
+            if (prev.some(f => f.id === cloudFamily.id)) return prev;
+            return [...prev, cloudFamily];
+          });
+        }
+      } catch (cloudErr) {}
+    }
+
+    // 4. Fallback demo check: default initial demo family HOM-RVS9
     if (!foundFamily && cleanInput === 'hom-rvs9') {
       foundFamily = { id: 'f1', name: 'Hogar RVS9', icon: '🏠', code: 'HOM-RVS9' };
       setFamilies(prev => {
@@ -342,6 +383,8 @@ export const FamilyProvider = ({ children }) => {
     if (currentUser) {
       // Check if user ALREADY belongs to this family -> PRESERVE EVERYTHING 100%!
       if (currentUser.familyId === foundFamily.id) {
+        sessionStorage.removeItem('hq_invite_code');
+        localStorage.removeItem('hq_invite_code');
         return { success: true, family: foundFamily, alreadyMember: true };
       }
 
@@ -349,6 +392,8 @@ export const FamilyProvider = ({ children }) => {
       const existingInFamily = members.find(m => (m.id === currentUser.id || m.email === currentUser.email) && m.familyId === foundFamily.id);
       if (existingInFamily) {
         setCurrentUser(existingInFamily);
+        sessionStorage.removeItem('hq_invite_code');
+        localStorage.removeItem('hq_invite_code');
         return { success: true, family: foundFamily, alreadyMember: true };
       }
 
@@ -362,6 +407,8 @@ export const FamilyProvider = ({ children }) => {
       };
       setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
       setCurrentUser(updatedUser);
+      sessionStorage.removeItem('hq_invite_code');
+      localStorage.removeItem('hq_invite_code');
     }
 
     addNotification('Unido a Familia', `¡Te has unido a la familia "${foundFamily.name}"!`);
@@ -667,6 +714,7 @@ export const FamilyProvider = ({ children }) => {
       notifications,
       autoLoginEnabled,
       setAutoLoginEnabled,
+      getPendingInviteCode: captureInviteCode,
       login,
       register,
       logout,

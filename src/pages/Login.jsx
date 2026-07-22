@@ -4,11 +4,11 @@ import { useFamily } from '../context/FamilyContext';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, members } = useFamily();
+  const { login, members, joinFamily, getPendingInviteCode } = useFamily();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (!email.trim()) {
       setError('Por favor, introduce tu email');
@@ -16,15 +16,23 @@ const Login = () => {
     }
     const result = login(email.trim());
     if (result && result.success) {
+      const pendingCode = getPendingInviteCode();
+      if (pendingCode) {
+        await joinFamily(pendingCode);
+      }
       navigate('/dashboard');
     } else {
       setError(result?.message || 'Error al iniciar sesión');
     }
   };
 
-  const handleQuickLogin = (emailAddress) => {
+  const handleQuickLogin = async (emailAddress) => {
     const result = login(emailAddress);
     if (result && result.success) {
+      const pendingCode = getPendingInviteCode();
+      if (pendingCode) {
+        await joinFamily(pendingCode);
+      }
       navigate('/dashboard');
     }
   };
