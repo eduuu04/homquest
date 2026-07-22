@@ -127,6 +127,46 @@ export const cloudApi = {
     }
   },
 
+  // Irreversibly delete a family from Cloud DB and shared global storage
+  async deleteFamily(familyId, code) {
+    try {
+      if (!familyId) return;
+
+      // 1. Delete from Supabase DB
+      try {
+        await supabase.from('families').delete().eq('id', familyId);
+        if (code) {
+          await supabase.from('families').delete().eq('code', code.trim().toUpperCase());
+        }
+      } catch (e) {}
+
+      // 2. Remove from Shared Global Registry
+      try {
+        const savedGlobal = localStorage.getItem('hq_global_families');
+        if (savedGlobal) {
+          const list = JSON.parse(savedGlobal);
+          const filtered = list.filter(f => f.id !== familyId && (code ? f.code !== code.trim().toUpperCase() : true));
+          localStorage.setItem('hq_global_families', JSON.stringify(filtered));
+        }
+      } catch (e) {}
+    } catch (err) {
+      console.error('Error deleting family from cloud:', err);
+    }
+  },
+
+  // Wipe all families and users from cloud DB and local storage
+  async purgeAllCloudData() {
+    try {
+      try {
+        await supabase.from('families').delete().neq('id', '0');
+        await supabase.from('members').delete().neq('id', '0');
+        await supabase.from('tasks').delete().neq('id', '0');
+      } catch (e) {}
+
+      localStorage.removeItem('hq_global_families');
+    } catch (e) {}
+  },
+
   // Auto-delete verified task photo from Cloud Bucket
   async deleteVerifiedPhoto(photoUrl) {
     try {

@@ -22,6 +22,13 @@ const resetHomQuestStorage = () => {
 };
 
 export const FamilyProvider = ({ children }) => {
+  // Purge all legacy test families and users cleanly on update
+  if (!localStorage.getItem('hq_v4_clean_purge')) {
+    resetHomQuestStorage();
+    cloudApi.purgeAllCloudData();
+    localStorage.setItem('hq_v4_clean_purge', 'true');
+  }
+
   // Current user state persistent on device
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('hq_current_user');
@@ -36,23 +43,16 @@ export const FamilyProvider = ({ children }) => {
 
   // State entities stored local-first with Cloud sync
   const [families, setFamilies] = useState(() => {
-    if (!localStorage.getItem('hq_v3_clean')) {
-      resetHomQuestStorage();
-      localStorage.setItem('hq_v3_clean', 'true');
-      return [];
-    }
     const saved = localStorage.getItem('hq_families');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [members, setMembers] = useState(() => {
-    if (!localStorage.getItem('hq_v3_clean')) return [];
     const saved = localStorage.getItem('hq_members');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [tasks, setTasks] = useState(() => {
-    if (!localStorage.getItem('hq_v3_clean')) return [];
     const saved = localStorage.getItem('hq_tasks');
     return saved ? JSON.parse(saved) : [];
   });
@@ -415,6 +415,33 @@ export const FamilyProvider = ({ children }) => {
     return { success: true, family: foundFamily };
   };
 
+  // Irreversibly delete a family and all associated data
+  const deleteFamily = async (familyIdToDelete) => {
+    const targetId = familyIdToDelete || currentUser?.familyId;
+    if (!targetId) return { success: false, message: 'No hay familia activa para eliminar.' };
+
+    const familyObj = families.find(f => f.id === targetId);
+
+    // 1. Delete from Cloud Server DB and shared global registries
+    await cloudApi.deleteFamily(targetId, familyObj?.code);
+
+    // 2. Remove family from local state
+    setFamilies(prev => prev.filter(f => f.id !== targetId));
+
+    // 3. Remove all members and tasks of this family
+    setMembers(prev => prev.filter(m => m.familyId !== targetId));
+    setTasks(prev => prev.filter(t => t.familyId !== targetId));
+
+    // 4. Reset currentUser familyId
+    if (currentUser && currentUser.familyId === targetId) {
+      const resetUser = { ...currentUser, familyId: null, role: 'member' };
+      setCurrentUser(resetUser);
+    }
+
+    addNotification('Familia Eliminada', 'La familia ha sido eliminada por completo de forma irreversible.');
+    return { success: true };
+  };
+
   // Tasks
   const addTask = async (taskData) => {
     const newTask = {
@@ -720,6 +747,7 @@ export const FamilyProvider = ({ children }) => {
       logout,
       createFamily,
       joinFamily,
+      deleteFamily,
       families,
       addTask,
       editTask,

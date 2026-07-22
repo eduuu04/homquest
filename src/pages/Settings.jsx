@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Edit2, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit2, ChevronDown, ChevronUp, Save, AlertTriangle } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const Settings = () => {
@@ -13,13 +13,18 @@ const Settings = () => {
     achievements, addAchievement, deleteAchievement,
     rewards, addReward, deleteReward,
     currentUser,
-    autoLoginEnabled, setAutoLoginEnabled
+    autoLoginEnabled, setAutoLoginEnabled,
+    deleteFamily, families
   } = useFamily();
 
   // Settings states
   const [familyName, setFamilyName] = useState(familySettings.familyName);
   const [familyIcon, setFamilyIcon] = useState(familySettings.familyIcon);
   const [weeklyResetDay, setWeeklyResetDay] = useState(familySettings.weeklyResetDay);
+  
+  // Danger Zone delete states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmCode, setDeleteConfirmCode] = useState('');
   
   // Collapsible sections
   const [openSection, setOpenSection] = useState(null); // levels, streaks, achievements, rewards, null
@@ -46,6 +51,19 @@ const Settings = () => {
   const [newAchIcon, setNewAchIcon] = useState('🏅');
 
   if (!currentUser || currentUser.role !== 'admin') return null;
+
+  const activeFamilyObj = families ? families.find(f => f.id === currentUser?.familyId) : null;
+  const currentFamilyCode = activeFamilyObj?.code || familySettings?.familyCode || 'HOM-RVS9';
+
+  const handleDeleteFamily = async () => {
+    if (deleteConfirmCode.trim().toUpperCase() !== currentFamilyCode.trim().toUpperCase()) {
+      return;
+    }
+    const res = await deleteFamily(currentUser?.familyId);
+    if (res && res.success) {
+      navigate('/family-setup', { replace: true });
+    }
+  };
 
   const handleSaveGeneral = (e) => {
     e.preventDefault();
@@ -360,6 +378,83 @@ const Settings = () => {
                 </div>
                 <button type="button" onClick={handleAddReward} className="btn btn-secondary btn-sm flex-center gap-1">
                   <Plus size={14} /> Añadir Recompensa
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 5. DANGER ZONE: DELETE FAMILY */}
+        <div 
+          className="card" 
+          style={{ 
+            padding: '20px', 
+            border: '2px solid var(--error)', 
+            background: 'var(--error-light)',
+            borderRadius: '16px',
+            marginTop: '32px',
+            marginBottom: '40px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)', marginBottom: '8px' }}>
+            <AlertTriangle size={20} />
+            <h3 style={{ fontWeight: '800', fontSize: '16px', margin: 0 }}>Zona de Peligro: Borrar Familia</h3>
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
+            Esta acción eliminará <strong>permanentemente</strong> la familia <strong>"{familySettings.familyName}"</strong> ({currentFamilyCode}), a todos sus miembros, tareas y datos acumulados. Esta acción es <strong>completamente irreversible</strong>.
+          </p>
+
+          {!showDeleteConfirm ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowDeleteConfirm(true)}
+              style={{
+                background: 'var(--error)',
+                color: '#fff',
+                fontWeight: '700',
+                width: '100%',
+                padding: '12px'
+              }}
+            >
+              🗑️ Borrar Familia por Completo
+            </button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#fff', padding: '14px', borderRadius: '12px', border: '1px solid var(--error)' }}>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--error)' }}>
+                Escribe el código de tu familia (<strong>{currentFamilyCode}</strong>) para confirmar:
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder={currentFamilyCode}
+                value={deleteConfirmCode}
+                onChange={(e) => setDeleteConfirmCode(e.target.value)}
+                style={{ borderColor: 'var(--error)', textTransform: 'uppercase' }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmCode('');
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={deleteConfirmCode.trim().toUpperCase() !== currentFamilyCode.trim().toUpperCase()}
+                  onClick={handleDeleteFamily}
+                  style={{
+                    background: deleteConfirmCode.trim().toUpperCase() === currentFamilyCode.trim().toUpperCase() ? 'var(--error)' : '#ccc',
+                    color: '#fff',
+                    fontWeight: '800'
+                  }}
+                >
+                  ⚠️ Sí, Borrar Todo
                 </button>
               </div>
             </div>
