@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { cloudApi } from '../services/cloudApi';
+import { cloudApi, sanitizeCode } from '../services/cloudApi';
 import {
   PREDEFINED_TASKS,
   INITIAL_LEVELS,
@@ -331,10 +331,11 @@ export const FamilyProvider = ({ children }) => {
       return { success: false, message: 'Por favor, introduce un código de familia válido.' };
     }
 
-    const cleanInput = code.trim().toLowerCase();
+    const cleanInput = code.trim();
+    const targetSanitized = sanitizeCode(cleanInput);
 
     // 1. Search in current state families
-    let foundFamily = families.find(f => f.code && f.code.trim().toLowerCase() === cleanInput);
+    let foundFamily = families.find(f => sanitizeCode(f.code) === targetSanitized);
 
     // 2. Search in global registry in localStorage (for cross-tab/device sync)
     if (!foundFamily) {
@@ -342,7 +343,7 @@ export const FamilyProvider = ({ children }) => {
         const savedGlobal = localStorage.getItem('hq_global_families');
         if (savedGlobal) {
           const globalList = JSON.parse(savedGlobal);
-          foundFamily = globalList.find(f => f.code && f.code.trim().toLowerCase() === cleanInput);
+          foundFamily = globalList.find(f => sanitizeCode(f.code) === targetSanitized);
           if (foundFamily) {
             setFamilies(prev => {
               if (prev.some(f => f.id === foundFamily.id)) return prev;
@@ -368,7 +369,7 @@ export const FamilyProvider = ({ children }) => {
     }
 
     // 4. Fallback demo check: default initial demo family HOM-RVS9
-    if (!foundFamily && cleanInput === 'hom-rvs9') {
+    if (!foundFamily && targetSanitized === 'HOMRVS9') {
       foundFamily = { id: 'f1', name: 'Hogar RVS9', icon: '🏠', code: 'HOM-RVS9' };
       setFamilies(prev => {
         if (prev.some(f => f.id === foundFamily.id)) return prev;

@@ -8,6 +8,11 @@ import { supabase, STORAGE_BUCKET } from './supabase';
 // Production Cloud API URL (Supabase PostgreSQL / Cloud Engine)
 const CLOUD_URL = import.meta.env.VITE_CLOUD_API_URL || 'https://homquest-api.supabase.co';
 
+export const sanitizeCode = (c) => {
+  if (!c) return '';
+  return c.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+};
+
 export const cloudApi = {
   // Generic Fetch with Cloud fallback
   async request(endpoint, options = {}) {
@@ -59,63 +64,84 @@ export const cloudApi = {
     try {
       if (!family || !family.code) return family;
 
+      const cleanCode = family.code.trim().toUpperCase();
+      const sanitized = sanitizeCode(cleanCode);
+
+      const entry = {
+        id: family.id,
+        name: family.name,
+        icon: family.icon,
+        code: cleanCode,
+        sanitizedCode: sanitized,
+        created_at: new Date().toISOString()
+      };
+
       // 1. Save to Supabase Cloud Table if available
       try {
-        await supabase.from('families').upsert([{
-          id: family.id,
-          name: family.name,
-          icon: family.icon,
-          code: family.code.trim().toUpperCase(),
-          created_at: new Date().toISOString()
-        }], { onConflict: 'id' });
+        await supabase.from('families').upsert([entry], { onConflict: 'id' });
       } catch (sbErr) {
         console.warn('Supabase DB notice:', sbErr.message);
       }
 
-      // 2. Save to Shared Local/Cloud Registry
+      // 2. Save to Shared Local & Broadcast Registry
       try {
         const existingStr = localStorage.getItem('hq_global_families');
         const existing = existingStr ? JSON.parse(existingStr) : [];
         const map = new Map();
         existing.forEach(f => map.set(f.id, f));
-        map.set(family.id, family);
-        localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
+        map.set(family.id, entry);
+        const updatedList = Array.from(map.values());
+        localStorage.setItem('hq_global_families', JSON.stringify(updatedList));
+
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('hq_family_sync');
+          bc.postMessage({ type: 'FAMILY_REGISTERED', family: entry });
+          bc.close();
+        }
       } catch (e) {}
 
-      return family;
+      return entry;
     } catch (err) {
       console.error('Error syncing family to cloud:', err);
       return family;
     }
   },
 
-  // Fetch family by code from 24/7 Cloud Database
+  // Fetch family by code from 24/7 Cloud Database with strict code sanitization
   async fetchFamilyByCode(code) {
     try {
       if (!code) return null;
       const cleanCode = code.trim().toUpperCase();
+      const targetSanitized = sanitizeCode(cleanCode);
 
       // 1. Try Supabase Cloud DB
       try {
-        const { data, error } = await supabase
+        const { data: exactMatch, error: err1 } = await supabase
           .from('families')
           .select('*')
           .eq('code', cleanCode)
           .maybeSingle();
 
-        if (data && !error) {
-          return { id: data.id, name: data.name, icon: data.icon, code: data.code };
+        if (exactMatch && !err1) {
+          return { id: exactMatch.id, name: exactMatch.name, icon: exactMatch.icon, code: exactMatch.code };
         }
-      } catch (sbErr) {
-        console.warn('Supabase fetch notice:', sbErr.message);
-      }
+
+        const { data: allFamilies, error: err2 } = await supabase
+          .from('families')
+          .select('*');
+
+        if (allFamilies && !err2 && Array.isArray(allFamilies)) {
+          const found = allFamilies.find(f => sanitizeCode(f.code) === targetSanitized);
+          if (found) return { id: found.id, name: found.name, icon: found.icon, code: found.code };
+        }
+      } catch (sbErr) {}
 
       // 2. Check Shared Global Registry
       try {
         const savedGlobal = localStorage.getItem('hq_global_families');
         if (savedGlobal) {
           const globalList = JSON.parse(savedGlobal);
-          const found = globalList.find(f => f.code && f.code.trim().toUpperCase() === cleanCode);
+          const found = globalList.find(f => sanitizeCode(f.code) === targetSanitized || (f.code && f.code.trim().toUpperCase() === cleanCode));
           if (found) return found;
         }
       } catch (e) {}
