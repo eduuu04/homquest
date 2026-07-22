@@ -6,14 +6,22 @@ import { useFamily } from '../context/FamilyContext';
 const AdminMembers = () => {
   const navigate = useNavigate();
   const { members, setMembers, currentUser, families, familySettings, tasks, toggleTaskAssignment } = useFamily();
-  const [copied, setCopied] = useState(false);
   const [managingTasksMemberId, setManagingTasksMemberId] = useState(null);
 
   if (!currentUser || currentUser.role !== 'admin') return null;
 
   const familyObj = families.find(f => f.id === currentUser.familyId);
+  const inviteCode = familyObj?.code || familySettings?.familyCode || 'HOM-RVS9';
   const inviteUrl = `${window.location.origin}${window.location.pathname}#/family-setup?code=${inviteCode}`;
+
+  const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(inviteCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(inviteUrl);
@@ -24,6 +32,26 @@ const AdminMembers = () => {
   const handleShareWhatsApp = () => {
     const text = encodeURIComponent(`¡Únete a nuestra familia en HomQuest!\n\n🔑 Código: ${inviteCode}\n👉 Enlace directo: ${inviteUrl}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const handleToggleRole = (memberId) => {
+    if (memberId === currentUser.id) return;
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          role: m.role === 'admin' ? 'member' : 'admin'
+        };
+      }
+      return m;
+    }));
+  };
+
+  const handleDeleteMember = (memberId) => {
+    if (memberId === currentUser.id) return;
+    if (window.confirm('¿Seguro que deseas eliminar a este miembro de la familia? Su historial se perderá.')) {
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+    }
   };
 
   return (
@@ -54,7 +82,7 @@ const AdminMembers = () => {
             onClick={handleCopyCode}
             className="btn btn-primary btn-sm flex-center gap-1"
           >
-            {copied ? <><Check size={14} /> ¡Código Copiado!</> : <><Copy size={14} /> Copiar Código</>}
+            {copiedCode ? <><Check size={14} /> ¡Código Copiado!</> : <><Copy size={14} /> Copiar Código</>}
           </button>
 
           <button 
