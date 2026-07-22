@@ -283,6 +283,22 @@ export const FamilyProvider = ({ children }) => {
     return { success: true, family: newFamily };
   };
 
+  // Self-healing safety check: If a family has no admin or currentUser is the only member, preserve/restore admin role!
+  useEffect(() => {
+    if (currentUser && currentUser.familyId) {
+      const familyMembers = members.filter(m => m.familyId === currentUser.familyId);
+      const hasAdmin = familyMembers.some(m => m.role === 'admin');
+      
+      if (!hasAdmin || familyMembers.length <= 1) {
+        if (currentUser.role !== 'admin') {
+          const promotedUser = { ...currentUser, role: 'admin' };
+          setCurrentUser(promotedUser);
+          setMembers(prev => prev.map(m => m.id === currentUser.id ? promotedUser : m));
+        }
+      }
+    }
+  }, [currentUser, members]);
+
   const joinFamily = (code, role = 'member') => {
     if (!code || !code.trim()) {
       return { success: false, message: 'Por favor, introduce un código de familia válido.' };
@@ -324,10 +340,25 @@ export const FamilyProvider = ({ children }) => {
     }
 
     if (currentUser) {
+      // Check if user ALREADY belongs to this family -> PRESERVE EVERYTHING 100%!
+      if (currentUser.familyId === foundFamily.id) {
+        return { success: true, family: foundFamily, alreadyMember: true };
+      }
+
+      // Check if user already exists in this family members list
+      const existingInFamily = members.find(m => (m.id === currentUser.id || m.email === currentUser.email) && m.familyId === foundFamily.id);
+      if (existingInFamily) {
+        setCurrentUser(existingInFamily);
+        return { success: true, family: foundFamily, alreadyMember: true };
+      }
+
+      // If joining a new family for the first time:
+      // Preserve existing admin status if user was already an admin
+      const newRole = currentUser.role === 'admin' ? 'admin' : (role || 'member');
       const updatedUser = { 
         ...currentUser, 
         familyId: foundFamily.id,
-        role: role || currentUser.role || 'member'
+        role: newRole
       };
       setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
       setCurrentUser(updatedUser);

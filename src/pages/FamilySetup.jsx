@@ -5,7 +5,7 @@ import { Home, Link as LinkIcon, Sparkles } from 'lucide-react';
 
 const FamilySetup = () => {
   const navigate = useNavigate();
-  const { createFamily, joinFamily, currentUser } = useFamily();
+  const { createFamily, joinFamily, currentUser, families } = useFamily();
   const [mode, setMode] = useState('choice'); // choice, create, join
   
   // Create states
@@ -22,10 +22,21 @@ const FamilySetup = () => {
     const searchParams = new URLSearchParams(rawSearch);
     const codeParam = searchParams.get('code') || searchParams.get('join');
     if (codeParam) {
-      setFamilyCode(codeParam.trim());
+      const cleanCode = codeParam.trim();
+      
+      // If user is ALREADY in a family and clicks invite link for their own family -> redirect straight to Dashboard!
+      if (currentUser && currentUser.familyId) {
+        const activeFamily = families.find(f => f.id === currentUser.familyId);
+        if (activeFamily && activeFamily.code.trim().toLowerCase() === cleanCode.toLowerCase()) {
+          navigate('/dashboard', { replace: true });
+          return;
+        }
+      }
+
+      setFamilyCode(cleanCode);
       setMode('join');
     }
-  }, []);
+  }, [currentUser, families, navigate]);
 
   if (!currentUser) return null;
 
