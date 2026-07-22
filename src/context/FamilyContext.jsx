@@ -28,6 +28,12 @@ export const FamilyProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : null;
   });
 
+  // Auto Login toggle state (persisted, default true)
+  const [autoLoginEnabled, setAutoLoginEnabled] = useState(() => {
+    const saved = localStorage.getItem('hq_auto_login');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
   // State entities stored local-first with Cloud sync
   const [families, setFamilies] = useState(() => {
     if (!localStorage.getItem('hq_v3_clean')) {
@@ -103,9 +109,39 @@ export const FamilyProvider = ({ children }) => {
 
   // Sync state changes to device localStorage for 100% offline resilience
   useEffect(() => {
-    if (currentUser) localStorage.setItem('hq_current_user', JSON.stringify(currentUser));
-    else localStorage.removeItem('hq_current_user');
+    if (currentUser) {
+      localStorage.setItem('hq_current_user', JSON.stringify(currentUser));
+      localStorage.setItem('hq_last_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('hq_current_user');
+    }
   }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('hq_auto_login', JSON.stringify(autoLoginEnabled));
+  }, [autoLoginEnabled]);
+
+  // Automatic session restoration for future sessions
+  useEffect(() => {
+    if (autoLoginEnabled && !currentUser && members.length > 0) {
+      const savedUserStr = localStorage.getItem('hq_last_user');
+      let matchedUser = null;
+      if (savedUserStr) {
+        try {
+          const parsed = JSON.parse(savedUserStr);
+          matchedUser = members.find(m => m.id === parsed.id || m.email === parsed.email);
+        } catch (e) {
+          matchedUser = null;
+        }
+      }
+      if (!matchedUser) {
+        matchedUser = members[0];
+      }
+      if (matchedUser) {
+        setCurrentUser(matchedUser);
+      }
+    }
+  }, [autoLoginEnabled, members, currentUser]);
 
   useEffect(() => { localStorage.setItem('hq_families', JSON.stringify(families)); }, [families]);
   useEffect(() => { localStorage.setItem('hq_members', JSON.stringify(members)); }, [members]);
@@ -550,6 +586,8 @@ export const FamilyProvider = ({ children }) => {
       familySettings,
       setFamilySettings,
       notifications,
+      autoLoginEnabled,
+      setAutoLoginEnabled,
       login,
       register,
       logout,

@@ -12,7 +12,8 @@ const Settings = () => {
     streaks, addStreak, deleteStreak,
     achievements, addAchievement, deleteAchievement,
     rewards, addReward, deleteReward,
-    currentUser
+    currentUser,
+    autoLoginEnabled, setAutoLoginEnabled
   } = useFamily();
 
   // Settings states
@@ -165,6 +166,21 @@ const Settings = () => {
               <option value="Saturday">Sábado</option>
               <option value="Sunday">Domingo</option>
             </select>
+          </div>
+
+          <div className="input-group" style={{ background: 'var(--surface-elevated)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', margin: 0 }}>
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>⚡ Inicio de Sesión Automático</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Mantiene la sesión iniciada al reabrir la app</div>
+              </div>
+              <input 
+                type="checkbox"
+                checked={autoLoginEnabled}
+                onChange={(e) => setAutoLoginEnabled(e.target.checked)}
+                style={{ width: '20px', height: '20px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+              />
+            </label>
           </div>
 
           <button type="submit" className="btn btn-primary w-full flex-center gap-2">
