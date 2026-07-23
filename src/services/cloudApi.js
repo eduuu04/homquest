@@ -1,14 +1,9 @@
-import { supabase, STORAGE_BUCKET } from './supabase';
+import { supabase, STORAGE_BUCKET, isSupabaseConfigured } from './supabase';
 
 /**
- * HomQuest Cloud API Service v1.0
- * Fully decoupled from local PC, connects directly to Cloud Server 24/7.
+ * HomQuest Supabase Cloud API Service v2.0
+ * 24/7 Serverless Cloud Service for Database and Storage (Task Photos)
  */
-
-// Production Cloud API URL (Supabase PostgreSQL / Cloud Engine)
-const CLOUD_URL = import.meta.env.VITE_CLOUD_API_URL || 'https://homquest-api.supabase.co';
-
-const MASTER_CLOUD_BLOB_URL = 'https://jsonblob.com/api/jsonBlob/019f9019-aed2-769f-a527-6a0951bfc153';
 
 export const sanitizeCode = (c) => {
   if (!c) return '';
@@ -16,52 +11,66 @@ export const sanitizeCode = (c) => {
 };
 
 export const cloudApi = {
-  // Generic Fetch with Cloud fallback
-  async request(endpoint, options = {}) {
-    try {
-      const res = await fetch(`${CLOUD_URL}/api${endpoint}`, {
-        headers: { 'Content-Type': 'application/json', ...options.headers },
-        ...options
-      });
-      if (!res.ok) throw new Error(`Cloud API error: ${res.statusText}`);
-      return await res.json();
-    } catch (err) {
-      console.warn('Using Supabase Cloud fallback for:', endpoint);
-      return null;
-    }
-  },
-
-  // Upload photo to Cloud Bucket
+  // Upload task proof photo to Supabase Storage bucket
   async uploadTaskPhoto(file, taskId) {
     try {
       if (!file) return null;
 
-      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
-      const filePath = `proofs/${taskId}_${Date.now()}.${fileExt}`;
+      // If Supabase is configured with real credentials
+      if (isSupabaseConfigured) {
+        const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
+        const filePath = `proofs/${taskId}_${Date.now()}.${fileExt}`;
 
-      const { data, error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, file, { upsert: true });
+        const { error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, file, { upsert: true });
 
-      if (error) throw error;
+        if (uploadError) {
+          console.error('Supabase Storage upload error:', uploadError);
+          throw uploadError;
+        }
 
-      const { data: publicUrlData } = supabase.storage
-        .from(STORAGE_BUCKET)
-        .getPublicUrl(filePath);
+        const { data: publicUrlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(filePath);
 
-      return publicUrlData.publicUrl;
+        return publicUrlData.publicUrl;
+      }
     } catch (err) {
-      console.error('Error uploading photo to cloud:', err);
-      // Fallback base64 / blob preview for mobile offline mode
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
+      console.warn('Falling back to local DataURL for photo preview:', err);
+    }
+
+    // Local fallback: Convert to Data URL (base64) for offline / local preview
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  },
+
+  // Auto-delete verified task photo from Supabase Storage bucket
+  async deleteVerifiedPhoto(photoUrl) {
+    try {
+      if (!photoUrl || !isSupabaseConfigured) return;
+
+      if (photoUrl.includes(STORAGE_BUCKET)) {
+        const parts = photoUrl.split(`${STORAGE_BUCKET}/`);
+        if (parts.length > 1) {
+          const relativePath = parts[1];
+          const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([relativePath]);
+          if (error) {
+            console.error('Error auto-deleting cloud photo:', error);
+          } else {
+            console.log('📸 Supabase Storage: Foto verificada eliminada automáticamente:', relativePath);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error in deleteVerifiedPhoto:', err);
     }
   },
 
-  // Register family to 24/7 Cloud Database for multi-device sync
+  // Register family in Supabase 24/7 Cloud Database
   async registerFamily(family) {
     try {
       if (!family || !family.code) return family;
@@ -74,19 +83,18 @@ export const cloudApi = {
         name: family.name,
         icon: family.icon,
         code: cleanCode,
-        sanitizedCode: sanitized,
+        sanitized_code: sanitized,
         created_at: new Date().toISOString()
       };
 
-      // 1. Save to Shared Local Registry
+      // 1. Save to Local Shared Registry for instant access
       try {
         const existingStr = localStorage.getItem('hq_global_families');
         const existing = existingStr ? JSON.parse(existingStr) : [];
         const map = new Map();
         existing.forEach(f => map.set(f.id, f));
-        map.set(family.id, entry);
-        const updatedList = Array.from(map.values());
-        localStorage.setItem('hq_global_families', JSON.stringify(updatedList));
+        map.set(family.id, { id: entry.id, name: entry.name, icon: entry.icon, code: entry.code, sanitizedCode: sanitized });
+        localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
 
         if (typeof BroadcastChannel !== 'undefined') {
           const bc = new BroadcastChannel('hq_family_sync');
@@ -95,87 +103,40 @@ export const cloudApi = {
         }
       } catch (e) {}
 
-      // 2. Publish immediately to 24/7 Master Cloud REST Server
-      try {
-        const res = await fetch(MASTER_CLOUD_BLOB_URL, { headers: { 'Accept': 'application/json' } });
-        let blobData = { families: [] };
-        if (res.ok) {
-          blobData = await res.json();
-        }
-        blobData.families = blobData.families || [];
-        const idx = blobData.families.findIndex(f => f.id === entry.id || f.sanitizedCode === sanitized);
-        if (idx >= 0) {
-          blobData.families[idx] = entry;
-        } else {
-          blobData.families.push(entry);
-        }
-        await fetch(MASTER_CLOUD_BLOB_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(blobData)
-        });
-      } catch (cloudErr) {
-        console.warn('Cloud Master Storage sync notice:', cloudErr);
-      }
-
-      // 3. Optional Supabase backup
-      try {
+      // 2. Publish to Supabase Cloud DB
+      if (isSupabaseConfigured) {
         await supabase.from('families').upsert([entry], { onConflict: 'id' });
-      } catch (sbErr) {}
+      }
 
       return entry;
     } catch (err) {
-      console.error('Error syncing family to cloud:', err);
+      console.error('Error registering family in Supabase:', err);
       return family;
     }
   },
 
-  // Fetch family by code from 24/7 Cloud Database with strict code sanitization
+  // Fetch family by invite code from Supabase 24/7 Cloud Database
   async fetchFamilyByCode(code) {
     try {
       if (!code) return null;
       const cleanCode = code.trim().toUpperCase();
       const targetSanitized = sanitizeCode(cleanCode);
 
-      // 1. Check Local Registry first for maximum speed
+      // 1. Check Local Registry first for instant response
       try {
         const savedGlobal = localStorage.getItem('hq_global_families');
         if (savedGlobal) {
           const globalList = JSON.parse(savedGlobal);
-          const found = globalList.find(f => sanitizeCode(f.code) === targetSanitized || (f.code && f.code.trim().toUpperCase() === cleanCode));
+          const found = globalList.find(f => 
+            sanitizeCode(f.code) === targetSanitized || 
+            (f.code && f.code.trim().toUpperCase() === cleanCode)
+          );
           if (found) return found;
         }
       } catch (e) {}
 
-      // 2. Fetch from 24/7 Master Cloud REST Server (Multi-device instant lookup)
-      try {
-        const res = await fetch(MASTER_CLOUD_BLOB_URL, { headers: { 'Accept': 'application/json' } });
-        if (res.ok) {
-          const blobData = await res.json();
-          const list = blobData.families || [];
-          const found = list.find(f => 
-            sanitizeCode(f.code) === targetSanitized || 
-            (f.code && f.code.trim().toUpperCase() === cleanCode)
-          );
-          if (found) {
-            // Save locally for instant subsequent access
-            try {
-              const savedGlobal = localStorage.getItem('hq_global_families');
-              const existing = savedGlobal ? JSON.parse(savedGlobal) : [];
-              const map = new Map();
-              existing.forEach(f => map.set(f.id, f));
-              map.set(found.id, found);
-              localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
-            } catch (e) {}
-            return found;
-          }
-        }
-      } catch (cloudErr) {
-        console.warn('Cloud Master Storage fetch notice:', cloudErr);
-      }
-
-      // 3. Fallback: Supabase Cloud DB query
-      try {
+      // 2. Query Supabase Cloud Database
+      if (isSupabaseConfigured) {
         const { data: exactMatch, error: err1 } = await supabase
           .from('families')
           .select('*')
@@ -183,7 +144,10 @@ export const cloudApi = {
           .maybeSingle();
 
         if (exactMatch && !err1) {
-          return { id: exactMatch.id, name: exactMatch.name, icon: exactMatch.icon, code: exactMatch.code };
+          const familyObj = { id: exactMatch.id, name: exactMatch.name, icon: exactMatch.icon, code: exactMatch.code };
+          // Cache in local registry
+          this._cacheFamilyLocally(familyObj);
+          return familyObj;
         }
 
         const { data: allFamilies, error: err2 } = await supabase
@@ -191,40 +155,43 @@ export const cloudApi = {
           .select('*');
 
         if (allFamilies && !err2 && Array.isArray(allFamilies)) {
-          const found = allFamilies.find(f => sanitizeCode(f.code) === targetSanitized);
-          if (found) return { id: found.id, name: found.name, icon: found.icon, code: found.code };
+          const found = allFamilies.find(f => 
+            sanitizeCode(f.code) === targetSanitized || 
+            (f.sanitized_code && f.sanitized_code === targetSanitized)
+          );
+          if (found) {
+            const familyObj = { id: found.id, name: found.name, icon: found.icon, code: found.code };
+            this._cacheFamilyLocally(familyObj);
+            return familyObj;
+          }
         }
-      } catch (sbErr) {}
+      }
 
       return null;
     } catch (err) {
-      console.error('Error fetching family from cloud:', err);
+      console.error('Error fetching family from Supabase:', err);
       return null;
     }
   },
 
-  // Irreversibly delete a family from Cloud DB and shared global storage
+  // Cache family in localStorage for instant access across tabs
+  _cacheFamilyLocally(familyObj) {
+    try {
+      const savedGlobal = localStorage.getItem('hq_global_families');
+      const existing = savedGlobal ? JSON.parse(savedGlobal) : [];
+      const map = new Map();
+      existing.forEach(f => map.set(f.id, f));
+      map.set(familyObj.id, familyObj);
+      localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
+    } catch (e) {}
+  },
+
+  // Irreversibly delete a family from Supabase Cloud DB
   async deleteFamily(familyId, code) {
     try {
       if (!familyId) return;
 
-      const sanitized = code ? sanitizeCode(code) : null;
-
-      // 1. Remove from 24/7 Master Cloud REST Server
-      try {
-        const res = await fetch(MASTER_CLOUD_BLOB_URL, { headers: { 'Accept': 'application/json' } });
-        if (res.ok) {
-          const blobData = await res.json();
-          blobData.families = (blobData.families || []).filter(f => f.id !== familyId && (sanitized ? f.sanitizedCode !== sanitized : true));
-          await fetch(MASTER_CLOUD_BLOB_URL, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(blobData)
-          });
-        }
-      } catch (e) {}
-
-      // 2. Remove from Shared Local Registry
+      // 1. Remove from Local Registry
       try {
         const savedGlobal = localStorage.getItem('hq_global_families');
         if (savedGlobal) {
@@ -234,49 +201,96 @@ export const cloudApi = {
         }
       } catch (e) {}
 
-      // 3. Supabase DB cleanup
-      try {
+      // 2. Remove from Supabase Cloud DB
+      if (isSupabaseConfigured) {
         await supabase.from('families').delete().eq('id', familyId);
-      } catch (e) {}
+      }
     } catch (err) {
-      console.error('Error deleting family from cloud:', err);
+      console.error('Error deleting family from Supabase:', err);
     }
   },
 
-  // Wipe all families and users from cloud DB and local storage
+  // Save/Update Task in Supabase Cloud
+  async syncTask(task) {
+    if (!isSupabaseConfigured || !task) return;
+    try {
+      const payload = {
+        id: task.id,
+        family_id: task.familyId,
+        title: task.title,
+        description: task.description || '',
+        icon: task.icon || '📋',
+        points: task.points || 0,
+        difficulty: task.difficulty || 'easy',
+        frequency: task.frequency || 'daily',
+        assigned_to: task.assignedTo || [],
+        requires_photo: !!task.requiresPhoto,
+        requires_admin_verification: !!task.requiresAdminVerification,
+        status: task.status || 'pending',
+        completed_by: task.completedBy || null,
+        completed_at: task.completedAt || null,
+        approved_by: task.approvedBy || null,
+        approved_at: task.approvedAt || null,
+        rejection_reason: task.rejectionReason || null,
+        photo_url: task.photoUrl || null,
+        comment: task.comment || '',
+        custom_days: task.customDays || [],
+        is_rotative: !!task.isRotative,
+        require_other_admin: !!task.requireOtherAdmin,
+        time_limit: task.timeLimit || '',
+        bonus_points: task.bonusPoints || 0
+      };
+
+      await supabase.from('tasks').upsert([payload], { onConflict: 'id' });
+    } catch (err) {
+      console.error('Error syncing task to Supabase:', err);
+    }
+  },
+
+  // Delete Task in Supabase Cloud
+  async deleteTask(taskId) {
+    if (!isSupabaseConfigured || !taskId) return;
+    try {
+      await supabase.from('tasks').delete().eq('id', taskId);
+    } catch (err) {
+      console.error('Error deleting task from Supabase:', err);
+    }
+  },
+
+  // Save/Update Member in Supabase Cloud
+  async syncMember(member) {
+    if (!isSupabaseConfigured || !member) return;
+    try {
+      const payload = {
+        id: member.id,
+        family_id: member.familyId,
+        name: member.name,
+        email: member.email,
+        role: member.role || 'member',
+        avatar: member.avatar || '👤',
+        level: member.level || 1,
+        total_xp: member.totalXP || 0,
+        coins: member.coins || 0,
+        weekly_points: member.weeklyPoints || 0,
+        monthly_points: member.monthlyPoints || 0,
+        current_streak: member.currentStreak || 0
+      };
+
+      await supabase.from('members').upsert([payload], { onConflict: 'id' });
+    } catch (err) {
+      console.error('Error syncing member to Supabase:', err);
+    }
+  },
+
+  // Purge legacy test data
   async purgeAllCloudData() {
     try {
-      try {
-        await fetch(MASTER_CLOUD_BLOB_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ families: [] })
-        });
-      } catch (e) {}
-
-      try {
+      if (isSupabaseConfigured) {
         await supabase.from('families').delete().neq('id', '0');
         await supabase.from('members').delete().neq('id', '0');
         await supabase.from('tasks').delete().neq('id', '0');
-      } catch (e) {}
-
+      }
       localStorage.removeItem('hq_global_families');
     } catch (e) {}
-  },
-
-  // Auto-delete verified task photo from Cloud Bucket
-  async deleteVerifiedPhoto(photoUrl) {
-    try {
-      if (!photoUrl || !photoUrl.includes(STORAGE_BUCKET)) return;
-      
-      const parts = photoUrl.split(`${STORAGE_BUCKET}/`);
-      if (parts.length > 1) {
-        const relativePath = parts[1];
-        await supabase.storage.from(STORAGE_BUCKET).remove([relativePath]);
-        console.log('📸 Cloud Storage: Foto verificada eliminada automáticamente:', relativePath);
-      }
-    } catch (err) {
-      console.error('Error auto-deleting cloud photo:', err);
-    }
   }
 };

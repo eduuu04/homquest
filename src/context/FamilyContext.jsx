@@ -469,15 +469,27 @@ export const FamilyProvider = ({ children }) => {
     };
 
     setTasks(prev => [newTask, ...prev]);
+    cloudApi.syncTask(newTask);
     addNotification('Nueva Tarea', `Se ha creado la tarea: ${taskData.title}`);
   };
 
   const editTask = async (id, updatedData) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updatedData } : t));
+    setTasks(prev => {
+      const updatedList = prev.map(t => {
+        if (t.id === id) {
+          const merged = { ...t, ...updatedData };
+          cloudApi.syncTask(merged);
+          return merged;
+        }
+        return t;
+      });
+      return updatedList;
+    });
   };
 
   const deleteTask = (id) => {
     setTasks(prev => prev.filter(t => t.id !== id));
+    cloudApi.deleteTask(id);
   };
 
   const toggleTaskAssignment = (taskId, memberId) => {
@@ -487,7 +499,9 @@ export const FamilyProvider = ({ children }) => {
         const newAssigned = alreadyAssigned
           ? t.assignedTo.filter(id => id !== memberId)
           : [...(t.assignedTo || []), memberId];
-        return { ...t, assignedTo: newAssigned };
+        const updated = { ...t, assignedTo: newAssigned };
+        cloudApi.syncTask(updated);
+        return updated;
       }
       return t;
     }));
@@ -495,11 +509,13 @@ export const FamilyProvider = ({ children }) => {
 
   const updateUserAvatar = (avatar) => {
     if (!currentUser) return;
-    setCurrentUser(prev => ({ ...prev, avatar }));
-    setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, avatar } : m));
+    const updatedUser = { ...currentUser, avatar };
+    setCurrentUser(updatedUser);
+    setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
+    cloudApi.syncMember(updatedUser);
   };
 
-  // Complete Task (with Cloud Photo Upload!)
+  // Complete Task (with Cloud Photo Upload to Supabase!)
   const completeTask = async (taskId, photoBlobOrUrl, comment = '') => {
     let finalPhotoUrl = null;
 
@@ -524,6 +540,7 @@ export const FamilyProvider = ({ children }) => {
     };
 
     setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+    cloudApi.syncTask(updatedTask);
 
     if (currentUser.role === 'admin' && !task.requireOtherAdmin) {
       await approveTask(taskId, currentUser.id, completedByUserId);
@@ -545,13 +562,16 @@ export const FamilyProvider = ({ children }) => {
     const earnedXP = Number(task.points || 0);
     const targetUserId = completedByUserId || task.completedBy || currentUser?.id;
 
-    setTasks(prev => prev.map(t => t.id === taskId ? {
-      ...t,
+    const approvedTask = {
+      ...task,
       status: 'approved',
       approvedBy: approvedByUserId,
       approvedAt: new Date().toISOString(),
       photoUrl: null
-    } : t));
+    };
+
+    setTasks(prev => prev.map(t => t.id === taskId ? approvedTask : t));
+    cloudApi.syncTask(approvedTask);
 
     setMembers(prev => prev.map(m => {
       if (m.id === targetUserId) {
@@ -569,7 +589,7 @@ export const FamilyProvider = ({ children }) => {
           addNotification('¡Subida de nivel!', `🎉 ¡${m.name} ha subido al nivel ${newLvl}: ${reachedLevel.title}!`);
         }
 
-        return {
+        const updatedMember = {
           ...m,
           totalXP: newXP,
           coins: newCoins,
@@ -578,6 +598,8 @@ export const FamilyProvider = ({ children }) => {
           weeklyPoints: newWeekly,
           monthlyPoints: newMonthly
         };
+        cloudApi.syncMember(updatedMember);
+        return updatedMember;
       }
       return m;
     }));
@@ -628,14 +650,17 @@ export const FamilyProvider = ({ children }) => {
       await cloudApi.deleteVerifiedPhoto(task.photoUrl);
     }
 
-    setTasks(prev => prev.map(t => t.id === taskId ? {
-      ...t,
+    const rejectedTask = {
+      ...task,
       status: 'rejected',
       rejectionReason: reason,
       approvedBy: approvedByUserId,
       approvedAt: new Date().toISOString(),
       photoUrl: null
-    } : t));
+    };
+
+    setTasks(prev => prev.map(t => t.id === taskId ? rejectedTask : t));
+    cloudApi.syncTask(rejectedTask);
 
     addNotification('Tarea Rechazada', `❌ Tu tarea "${task.title}" fue rechazada. Motivo: ${reason}`);
   };
