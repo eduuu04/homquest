@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import { cloudApi, sanitizeCode } from '../services/cloudApi';
-import { supabase } from '../services/supabase';
+import { supabase, isSupabaseConfigured } from '../services/supabase';
 import {
   PREDEFINED_TASKS,
   INITIAL_LEVELS,
@@ -26,7 +26,7 @@ export const FamilyProvider = ({ children }) => {
     return saved !== null ? JSON.parse(saved) : true;
   });
 
-  // State entities initialized from LocalStorage and immediately merged with Cloud
+  // State entities initialized from LocalStorage (fallback before cloud sync)
   const [families, setFamilies] = useState(() => {
     const saved = localStorage.getItem('hq_families');
     return saved ? JSON.parse(saved) : [];
@@ -89,119 +89,81 @@ export const FamilyProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // --- FULL 24/7 CLOUD SYNCHRONIZATION ---
+  // --- CLOUD FIRST (SINGLE SOURCE OF TRUTH) ---
+  // The cloud strictly dictates current state. Local items never re-upload if deleted from cloud.
 
-  // 1. On Mount: Push any local entities to Supabase Cloud, and pull all Cloud Data
   const syncEverythingWithCloud = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
     try {
-      // Step A: Push local families and members to Cloud to ensure no local data is lost
-      const localFamiliesStr = localStorage.getItem('hq_families');
-      if (localFamiliesStr) {
-        const localFams = JSON.parse(localFamiliesStr);
-        for (const fam of localFams) {
-          await cloudApi.registerFamily(fam);
-        }
-      }
-
-      const localMembersStr = localStorage.getItem('hq_members');
-      if (localMembersStr) {
-        const localMems = JSON.parse(localMembersStr);
-        for (const mem of localMems) {
-          await cloudApi.syncMember(mem);
-        }
-      }
-
-      const localTasksStr = localStorage.getItem('hq_tasks');
-      if (localTasksStr) {
-        const localTs = JSON.parse(localTasksStr);
-        for (const t of localTs) {
-          await cloudApi.syncTask(t);
-        }
-      }
-
-      // Step B: Fetch complete state from Supabase Cloud
+      // 1. Fetch exact current state from Supabase Cloud
       const cloudFamilies = await cloudApi.fetchFamilies();
-      if (cloudFamilies.length > 0) {
-        setFamilies(prev => {
-          const map = new Map();
-          prev.forEach(f => map.set(f.id, f));
-          cloudFamilies.forEach(f => map.set(f.id, f));
-          return Array.from(map.values());
-        });
-      }
-
       const cloudMembers = await cloudApi.fetchMembers();
-      if (cloudMembers.length > 0) {
-        setMembers(prev => {
-          const map = new Map();
-          prev.forEach(m => map.set(m.id, m));
-          cloudMembers.forEach(m => map.set(m.id, m));
-          return Array.from(map.values());
-        });
-      }
-
       const cloudTasks = await cloudApi.fetchTasks();
-      if (cloudTasks.length > 0) {
-        setTasks(prev => {
-          const map = new Map();
-          prev.forEach(t => map.set(t.id, t));
-          cloudTasks.forEach(t => map.set(t.id, t));
-          return Array.from(map.values());
-        });
-      }
-
       const cloudRewards = await cloudApi.fetchRewards();
-      if (cloudRewards.length > 0) {
-        setRewards(prev => {
-          const map = new Map();
-          prev.forEach(r => map.set(r.id, r));
-          cloudRewards.forEach(r => map.set(r.id, r));
-          return Array.from(map.values());
-        });
-      }
-
       const cloudClaimed = await cloudApi.fetchClaimedRewards();
-      if (cloudClaimed.length > 0) {
-        setClaimedRewards(prev => {
-          const map = new Map();
-          prev.forEach(c => map.set(c.id, c));
-          cloudClaimed.forEach(c => map.set(c.id, c));
-          return Array.from(map.values());
-        });
-      }
-
       const cloudLogs = await cloudApi.fetchActivityLog();
-      if (cloudLogs.length > 0) {
-        setActivityLog(prev => {
-          const map = new Map();
-          prev.forEach(l => map.set(l.id, l));
-          cloudLogs.forEach(l => map.set(l.id, l));
-          return Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        });
-      }
-
       const cloudNotifs = await cloudApi.fetchNotifications();
-      if (cloudNotifs.length > 0) {
-        setNotifications(prev => {
-          const map = new Map();
-          prev.forEach(n => map.set(n.id, n));
-          cloudNotifs.forEach(n => map.set(n.id, n));
-          return Array.from(map.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
-        });
-      }
+
+      // 2. Overwrite local state with exact Cloud state (NO MERGING OF DELETED LOCAL ITEMS)
+      setFamilies(cloudFamilies);
+      setMembers(cloudMembers);
+      setTasks(cloudTasks);
+      if (cloudRewards.length > 0) setRewards(cloudRewards);
+      setClaimedRewards(cloudClaimed);
+      setActivityLog(cloudLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+      setNotifications(cloudNotifs.sort((a, b) => new Date(b.date) - new Date(a.date)));
+
+      // 3. Verify currentUser consistency with Cloud
+      setCurrentUser(prev => {
+        if (!prev) return null;
+        const existsInCloud = cloudMembers.find(m => m.id === prev.id);
+        if (!existsInCloud) return null; // Logged out if user deleted from Cloud
+
+        // If user's family was deleted from Cloud, unbind familyId
+        if (existsInCloud.familyId && !cloudFamilies.some(f => f.id === existsInCloud.familyId)) {
+          const unbound = { ...existsInCloud, familyId: null, role: 'member' };
+          cloudApi.syncMember(unbound);
+          return unbound;
+        }
+
+        return existsInCloud;
+      });
+
     } catch (err) {
-      console.error('Error during initial cloud sync:', err);
+      console.error('Error during cloud-first sync:', err);
     }
   }, []);
 
+  // Real-Time Postgres Subscription: Listen to any INSERT, UPDATE, DELETE on Supabase Cloud
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    // Initial pull
     syncEverythingWithCloud();
-    // Poll Supabase Cloud every 5 seconds for instant multi-device 24/7 sync
-    const interval = setInterval(syncEverythingWithCloud, 5000);
-    return () => clearInterval(interval);
+
+    // Subscribe to real-time database changes (instant <1s sync across devices)
+    const channel = supabase
+      .channel('homquest-realtime-cloud')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public' },
+        () => {
+          // Instantly sync state whenever ANY change occurs in Supabase Cloud
+          syncEverythingWithCloud();
+        }
+      )
+      .subscribe();
+
+    // Secondary safety polling every 1.5 seconds
+    const interval = setInterval(syncEverythingWithCloud, 1500);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [syncEverythingWithCloud]);
 
-  // Sync state to local storage as fallback
+  // Mirror current state to localStorage as offline view cache
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('hq_current_user', JSON.stringify(currentUser));
@@ -211,10 +173,7 @@ export const FamilyProvider = ({ children }) => {
     }
   }, [currentUser]);
 
-  useEffect(() => {
-    localStorage.setItem('hq_auto_login', JSON.stringify(autoLoginEnabled));
-  }, [autoLoginEnabled]);
-
+  useEffect(() => { localStorage.setItem('hq_auto_login', JSON.stringify(autoLoginEnabled)); }, [autoLoginEnabled]);
   useEffect(() => { localStorage.setItem('hq_families', JSON.stringify(families)); }, [families]);
   useEffect(() => { localStorage.setItem('hq_members', JSON.stringify(members)); }, [members]);
   useEffect(() => { localStorage.setItem('hq_tasks', JSON.stringify(tasks)); }, [tasks]);
@@ -226,28 +185,6 @@ export const FamilyProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem('hq_family_settings', JSON.stringify(familySettings)); }, [familySettings]);
   useEffect(() => { localStorage.setItem('hq_notifications', JSON.stringify(notifications)); }, [notifications]);
   useEffect(() => { localStorage.setItem('hq_claimed_rewards', JSON.stringify(claimedRewards)); }, [claimedRewards]);
-
-  // Automatic session restoration
-  useEffect(() => {
-    if (autoLoginEnabled && !currentUser && members.length > 0) {
-      const savedUserStr = localStorage.getItem('hq_last_user');
-      let matchedUser = null;
-      if (savedUserStr) {
-        try {
-          const parsed = JSON.parse(savedUserStr);
-          matchedUser = members.find(m => m.id === parsed.id || m.email === parsed.email);
-        } catch (e) {
-          matchedUser = null;
-        }
-      }
-      if (!matchedUser) {
-        matchedUser = members[0];
-      }
-      if (matchedUser) {
-        setCurrentUser(matchedUser);
-      }
-    }
-  }, [autoLoginEnabled, members, currentUser]);
 
   // Auth
   const login = (email) => {
@@ -283,7 +220,6 @@ export const FamilyProvider = ({ children }) => {
     setMembers(prev => [...prev, newMember]);
     setCurrentUser(newMember);
 
-    // Sync member to Supabase Cloud
     await cloudApi.syncMember(newMember);
 
     const logEntry = {
@@ -340,7 +276,6 @@ export const FamilyProvider = ({ children }) => {
     captureInviteCode();
   }, []);
 
-  // Create Family -> Immediately syncs to Supabase 24/7 Cloud
   const createFamily = async (name, icon) => {
     const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     const newFamily = {
@@ -351,11 +286,8 @@ export const FamilyProvider = ({ children }) => {
     };
 
     setFamilies(prev => [...prev, newFamily]);
-    
-    // 1. Sync Family to Supabase Cloud
     await cloudApi.registerFamily(newFamily);
 
-    // 2. Update Member with familyId and role=admin, sync to Supabase Cloud
     let updatedUser = null;
     if (currentUser) {
       updatedUser = { ...currentUser, familyId: newFamily.id, role: 'admin' };
@@ -364,7 +296,6 @@ export const FamilyProvider = ({ children }) => {
       await cloudApi.syncMember(updatedUser);
     }
 
-    // 3. Initialize family settings
     setFamilySettings({
       familyName: name,
       familyIcon: icon,
@@ -374,7 +305,6 @@ export const FamilyProvider = ({ children }) => {
       autoApproveNoPhoto: false,
     });
 
-    // 4. Seed initial tasks to Cloud
     if (updatedUser) {
       const starterTasks = PREDEFINED_TASKS.slice(0, 4).map((pt, idx) => {
         const t = {
@@ -446,25 +376,10 @@ export const FamilyProvider = ({ children }) => {
       await cloudApi.syncMember(updatedUser);
 
       const cloudMembers = await cloudApi.fetchMembers(foundFamily.id);
-      if (cloudMembers.length > 0) {
-        setMembers(prev => {
-          const map = new Map();
-          prev.forEach(m => map.set(m.id, m));
-          cloudMembers.forEach(m => map.set(m.id, m));
-          map.set(updatedUser.id, updatedUser);
-          return Array.from(map.values());
-        });
-      }
+      if (cloudMembers.length > 0) setMembers(cloudMembers);
 
       const cloudTasks = await cloudApi.fetchTasks(foundFamily.id);
-      if (cloudTasks.length > 0) {
-        setTasks(prev => {
-          const map = new Map();
-          prev.forEach(t => map.set(t.id, t));
-          cloudTasks.forEach(t => map.set(t.id, t));
-          return Array.from(map.values());
-        });
-      }
+      if (cloudTasks.length > 0) setTasks(cloudTasks);
 
       sessionStorage.removeItem('hq_invite_code');
       localStorage.removeItem('hq_invite_code');
