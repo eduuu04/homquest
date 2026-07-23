@@ -251,7 +251,7 @@ export const FamilyProvider = ({ children }) => {
   }, []);
 
   // Onboarding
-  const createFamily = (name, icon) => {
+  const createFamily = async (name, icon) => {
     const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     const newFamily = {
       id: 'f_' + Date.now(),
@@ -262,8 +262,8 @@ export const FamilyProvider = ({ children }) => {
 
     setFamilies(prev => [...prev, newFamily]);
     
-    // Sync to 24/7 Cloud Database for multi-device joining
-    cloudApi.registerFamily(newFamily);
+    // Sync to 24/7 Cloud Database for multi-device joining (await to ensure completion before redirect)
+    await cloudApi.registerFamily(newFamily);
 
     // Update member with familyId
     let updatedUser = null;

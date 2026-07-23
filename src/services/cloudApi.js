@@ -8,6 +8,8 @@ import { supabase, STORAGE_BUCKET } from './supabase';
 // Production Cloud API URL (Supabase PostgreSQL / Cloud Engine)
 const CLOUD_URL = import.meta.env.VITE_CLOUD_API_URL || 'https://homquest-api.supabase.co';
 
+const MASTER_CLOUD_BLOB_URL = 'https://jsonblob.com/api/jsonBlob/019f9019-aed2-769f-a527-6a0951bfc153';
+
 export const sanitizeCode = (c) => {
   if (!c) return '';
   return c.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -76,14 +78,7 @@ export const cloudApi = {
         created_at: new Date().toISOString()
       };
 
-      // 1. Save to Supabase Cloud Table if available
-      try {
-        await supabase.from('families').upsert([entry], { onConflict: 'id' });
-      } catch (sbErr) {
-        console.warn('Supabase DB notice:', sbErr.message);
-      }
-
-      // 2. Save to Shared Local & Broadcast Registry
+      // 1. Save to Shared Local Registry
       try {
         const existingStr = localStorage.getItem('hq_global_families');
         const existing = existingStr ? JSON.parse(existingStr) : [];
@@ -100,6 +95,34 @@ export const cloudApi = {
         }
       } catch (e) {}
 
+      // 2. Publish immediately to 24/7 Master Cloud REST Server
+      try {
+        const res = await fetch(MASTER_CLOUD_BLOB_URL, { headers: { 'Accept': 'application/json' } });
+        let blobData = { families: [] };
+        if (res.ok) {
+          blobData = await res.json();
+        }
+        blobData.families = blobData.families || [];
+        const idx = blobData.families.findIndex(f => f.id === entry.id || f.sanitizedCode === sanitized);
+        if (idx >= 0) {
+          blobData.families[idx] = entry;
+        } else {
+          blobData.families.push(entry);
+        }
+        await fetch(MASTER_CLOUD_BLOB_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(blobData)
+        });
+      } catch (cloudErr) {
+        console.warn('Cloud Master Storage sync notice:', cloudErr);
+      }
+
+      // 3. Optional Supabase backup
+      try {
+        await supabase.from('families').upsert([entry], { onConflict: 'id' });
+      } catch (sbErr) {}
+
       return entry;
     } catch (err) {
       console.error('Error syncing family to cloud:', err);
@@ -114,7 +137,44 @@ export const cloudApi = {
       const cleanCode = code.trim().toUpperCase();
       const targetSanitized = sanitizeCode(cleanCode);
 
-      // 1. Try Supabase Cloud DB
+      // 1. Check Local Registry first for maximum speed
+      try {
+        const savedGlobal = localStorage.getItem('hq_global_families');
+        if (savedGlobal) {
+          const globalList = JSON.parse(savedGlobal);
+          const found = globalList.find(f => sanitizeCode(f.code) === targetSanitized || (f.code && f.code.trim().toUpperCase() === cleanCode));
+          if (found) return found;
+        }
+      } catch (e) {}
+
+      // 2. Fetch from 24/7 Master Cloud REST Server (Multi-device instant lookup)
+      try {
+        const res = await fetch(MASTER_CLOUD_BLOB_URL, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const blobData = await res.json();
+          const list = blobData.families || [];
+          const found = list.find(f => 
+            sanitizeCode(f.code) === targetSanitized || 
+            (f.code && f.code.trim().toUpperCase() === cleanCode)
+          );
+          if (found) {
+            // Save locally for instant subsequent access
+            try {
+              const savedGlobal = localStorage.getItem('hq_global_families');
+              const existing = savedGlobal ? JSON.parse(savedGlobal) : [];
+              const map = new Map();
+              existing.forEach(f => map.set(f.id, f));
+              map.set(found.id, found);
+              localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
+            } catch (e) {}
+            return found;
+          }
+        }
+      } catch (cloudErr) {
+        console.warn('Cloud Master Storage fetch notice:', cloudErr);
+      }
+
+      // 3. Fallback: Supabase Cloud DB query
       try {
         const { data: exactMatch, error: err1 } = await supabase
           .from('families')
@@ -136,16 +196,6 @@ export const cloudApi = {
         }
       } catch (sbErr) {}
 
-      // 2. Check Shared Global Registry
-      try {
-        const savedGlobal = localStorage.getItem('hq_global_families');
-        if (savedGlobal) {
-          const globalList = JSON.parse(savedGlobal);
-          const found = globalList.find(f => sanitizeCode(f.code) === targetSanitized || (f.code && f.code.trim().toUpperCase() === cleanCode));
-          if (found) return found;
-        }
-      } catch (e) {}
-
       return null;
     } catch (err) {
       console.error('Error fetching family from cloud:', err);
@@ -158,15 +208,23 @@ export const cloudApi = {
     try {
       if (!familyId) return;
 
-      // 1. Delete from Supabase DB
+      const sanitized = code ? sanitizeCode(code) : null;
+
+      // 1. Remove from 24/7 Master Cloud REST Server
       try {
-        await supabase.from('families').delete().eq('id', familyId);
-        if (code) {
-          await supabase.from('families').delete().eq('code', code.trim().toUpperCase());
+        const res = await fetch(MASTER_CLOUD_BLOB_URL, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const blobData = await res.json();
+          blobData.families = (blobData.families || []).filter(f => f.id !== familyId && (sanitized ? f.sanitizedCode !== sanitized : true));
+          await fetch(MASTER_CLOUD_BLOB_URL, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(blobData)
+          });
         }
       } catch (e) {}
 
-      // 2. Remove from Shared Global Registry
+      // 2. Remove from Shared Local Registry
       try {
         const savedGlobal = localStorage.getItem('hq_global_families');
         if (savedGlobal) {
@@ -174,6 +232,11 @@ export const cloudApi = {
           const filtered = list.filter(f => f.id !== familyId && (code ? f.code !== code.trim().toUpperCase() : true));
           localStorage.setItem('hq_global_families', JSON.stringify(filtered));
         }
+      } catch (e) {}
+
+      // 3. Supabase DB cleanup
+      try {
+        await supabase.from('families').delete().eq('id', familyId);
       } catch (e) {}
     } catch (err) {
       console.error('Error deleting family from cloud:', err);
@@ -183,6 +246,14 @@ export const cloudApi = {
   // Wipe all families and users from cloud DB and local storage
   async purgeAllCloudData() {
     try {
+      try {
+        await fetch(MASTER_CLOUD_BLOB_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ families: [] })
+        });
+      } catch (e) {}
+
       try {
         await supabase.from('families').delete().neq('id', '0');
         await supabase.from('members').delete().neq('id', '0');

@@ -40,11 +40,11 @@ const FamilySetup = () => {
 
   if (!currentUser) return null;
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (!familyName.trim()) return;
 
-    const res = createFamily(familyName.trim(), familyIcon);
+    const res = await createFamily(familyName.trim(), familyIcon);
     if (res && res.success) {
       navigate('/dashboard');
     }
