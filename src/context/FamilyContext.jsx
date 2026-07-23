@@ -23,10 +23,10 @@ const resetHomQuestStorage = () => {
 
 export const FamilyProvider = ({ children }) => {
   // Purge all legacy test families and users cleanly on update
-  if (!localStorage.getItem('hq_v4_clean_purge')) {
+  if (!localStorage.getItem('hq_v5_clean_purge')) {
     resetHomQuestStorage();
     cloudApi.purgeAllCloudData();
-    localStorage.setItem('hq_v4_clean_purge', 'true');
+    localStorage.setItem('hq_v5_clean_purge', 'true');
   }
 
   // Current user state persistent on device
