@@ -175,7 +175,7 @@ export const FamilyProvider = ({ children }) => {
     return { success: false, message: 'No existe ninguna cuenta con ese email en esta app.' };
   };
 
-  const register = (name, email, role = 'member') => {
+  const register = async (name, email, role = 'member') => {
     const cleanEmail = email.toLowerCase().trim();
     if (members.some(m => m.email.toLowerCase() === cleanEmail)) {
       return { success: false, message: 'El email ya está registrado. Inicia sesión con él.' };
@@ -198,6 +198,9 @@ export const FamilyProvider = ({ children }) => {
 
     setMembers(prev => [...prev, newMember]);
     setCurrentUser(newMember);
+
+    // Sync member to Supabase Cloud
+    await cloudApi.syncMember(newMember);
 
     // Log activity
     setActivityLog(prev => [{
@@ -262,7 +265,7 @@ export const FamilyProvider = ({ children }) => {
 
     setFamilies(prev => [...prev, newFamily]);
     
-    // Sync to 24/7 Cloud Database for multi-device joining (await to ensure completion before redirect)
+    // Sync to 24/7 Cloud Database for multi-device joining
     await cloudApi.registerFamily(newFamily);
 
     // Update member with familyId
@@ -271,6 +274,7 @@ export const FamilyProvider = ({ children }) => {
       updatedUser = { ...currentUser, familyId: newFamily.id, role: 'admin' };
       setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
       setCurrentUser(updatedUser);
+      await cloudApi.syncMember(updatedUser);
     }
 
     // Initialize clean family settings
@@ -285,23 +289,27 @@ export const FamilyProvider = ({ children }) => {
 
     // Seed initial recommended tasks for the new family
     if (updatedUser) {
-      const starterTasks = PREDEFINED_TASKS.slice(0, 4).map((pt, idx) => ({
-        id: 't_seed_' + Date.now() + '_' + idx,
-        title: pt.title,
-        description: `Tarea inicial recomendada para el hogar`,
-        icon: pt.icon,
-        points: pt.points,
-        difficulty: pt.difficulty,
-        frequency: pt.frequency,
-        assignedTo: [updatedUser.id],
-        requiresPhoto: pt.difficulty === 'medium' || pt.difficulty === 'hard',
-        requiresAdminVerification: true,
-        status: 'pending',
-        completedBy: null,
-        completedAt: null,
-        photoUrl: null,
-        familyId: newFamily.id
-      }));
+      const starterTasks = PREDEFINED_TASKS.slice(0, 4).map((pt, idx) => {
+        const t = {
+          id: 't_seed_' + Date.now() + '_' + idx,
+          title: pt.title,
+          description: `Tarea inicial recomendada para el hogar`,
+          icon: pt.icon,
+          points: pt.points,
+          difficulty: pt.difficulty,
+          frequency: pt.frequency,
+          assignedTo: [updatedUser.id],
+          requiresPhoto: pt.difficulty === 'medium' || pt.difficulty === 'hard',
+          requiresAdminVerification: true,
+          status: 'pending',
+          completedBy: null,
+          completedAt: null,
+          photoUrl: null,
+          familyId: newFamily.id
+        };
+        cloudApi.syncTask(t);
+        return t;
+      });
 
       setTasks(prev => [...starterTasks, ...prev]);
     }
@@ -321,10 +329,44 @@ export const FamilyProvider = ({ children }) => {
           const promotedUser = { ...currentUser, role: 'admin' };
           setCurrentUser(promotedUser);
           setMembers(prev => prev.map(m => m.id === currentUser.id ? promotedUser : m));
+          cloudApi.syncMember(promotedUser);
         }
       }
     }
   }, [currentUser, members]);
+
+  // Periodically sync members and tasks for active family from Supabase Cloud
+  useEffect(() => {
+    if (!currentUser?.familyId) return;
+
+    const syncCloudData = async () => {
+      try {
+        const cloudMembers = await cloudApi.fetchMembers(currentUser.familyId);
+        if (cloudMembers.length > 0) {
+          setMembers(prev => {
+            const map = new Map();
+            prev.forEach(m => map.set(m.id, m));
+            cloudMembers.forEach(m => map.set(m.id, m));
+            return Array.from(map.values());
+          });
+        }
+
+        const cloudTasks = await cloudApi.fetchTasks(currentUser.familyId);
+        if (cloudTasks.length > 0) {
+          setTasks(prev => {
+            const map = new Map();
+            prev.forEach(t => map.set(t.id, t));
+            cloudTasks.forEach(t => map.set(t.id, t));
+            return Array.from(map.values());
+          });
+        }
+      } catch (e) {}
+    };
+
+    syncCloudData();
+    const interval = setInterval(syncCloudData, 8000);
+    return () => clearInterval(interval);
+  }, [currentUser?.familyId]);
 
   const joinFamily = async (code, role = 'member') => {
     if (!code || !code.trim()) {
@@ -368,49 +410,56 @@ export const FamilyProvider = ({ children }) => {
       } catch (cloudErr) {}
     }
 
-    // 4. Fallback demo check: default initial demo family HOM-RVS9
-    if (!foundFamily && targetSanitized === 'HOMRVS9') {
-      foundFamily = { id: 'f1', name: 'Hogar RVS9', icon: '🏠', code: 'HOM-RVS9' };
-      setFamilies(prev => {
-        if (prev.some(f => f.id === foundFamily.id)) return prev;
-        return [...prev, foundFamily];
-      });
-    }
-
     if (!foundFamily) {
-      return { success: false, message: `Código de familia "${code.trim()}" no encontrado. Comprueba las mayúsculas y minúsculas.` };
+      return { success: false, message: `Código de familia "${code.trim()}" no encontrado en la nube. Pide el código al administrador.` };
     }
 
     if (currentUser) {
-      // Check if user ALREADY belongs to this family -> PRESERVE EVERYTHING 100%!
-      if (currentUser.familyId === foundFamily.id) {
-        sessionStorage.removeItem('hq_invite_code');
-        localStorage.removeItem('hq_invite_code');
-        return { success: true, family: foundFamily, alreadyMember: true };
-      }
-
-      // Check if user already exists in this family members list
-      const existingInFamily = members.find(m => (m.id === currentUser.id || m.email === currentUser.email) && m.familyId === foundFamily.id);
-      if (existingInFamily) {
-        setCurrentUser(existingInFamily);
-        sessionStorage.removeItem('hq_invite_code');
-        localStorage.removeItem('hq_invite_code');
-        return { success: true, family: foundFamily, alreadyMember: true };
-      }
-
-      // If joining a new family for the first time:
-      // Preserve existing admin status if user was already an admin
       const newRole = currentUser.role === 'admin' ? 'admin' : (role || 'member');
       const updatedUser = { 
         ...currentUser, 
         familyId: foundFamily.id,
         role: newRole
       };
+
       setMembers(prev => prev.map(m => m.id === currentUser.id ? updatedUser : m));
       setCurrentUser(updatedUser);
+
+      // Sync member's updated familyId to Supabase Cloud!
+      await cloudApi.syncMember(updatedUser);
+
+      // Fetch family members from Supabase Cloud
+      const cloudMembers = await cloudApi.fetchMembers(foundFamily.id);
+      if (cloudMembers.length > 0) {
+        setMembers(prev => {
+          const map = new Map();
+          prev.forEach(m => map.set(m.id, m));
+          cloudMembers.forEach(m => map.set(m.id, m));
+          map.set(updatedUser.id, updatedUser);
+          return Array.from(map.values());
+        });
+      }
+
+      // Fetch family tasks from Supabase Cloud
+      const cloudTasks = await cloudApi.fetchTasks(foundFamily.id);
+      if (cloudTasks.length > 0) {
+        setTasks(prev => {
+          const map = new Map();
+          prev.forEach(t => map.set(t.id, t));
+          cloudTasks.forEach(t => map.set(t.id, t));
+          return Array.from(map.values());
+        });
+      }
+
       sessionStorage.removeItem('hq_invite_code');
       localStorage.removeItem('hq_invite_code');
     }
+
+    setFamilySettings(prev => ({
+      ...prev,
+      familyName: foundFamily.name,
+      familyIcon: foundFamily.icon || '🏠'
+    }));
 
     addNotification('Unido a Familia', `¡Te has unido a la familia "${foundFamily.name}"!`);
     return { success: true, family: foundFamily };

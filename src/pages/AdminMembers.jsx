@@ -13,8 +13,8 @@ const AdminMembers = () => {
   if (!currentUser || currentUser.role !== 'admin') return null;
 
   const familyObj = families ? families.find(f => f.id === currentUser.familyId) : null;
-  const inviteCode = familyObj?.code || familySettings?.familyCode || 'HOM-RVS9';
-  const inviteUrl = `${window.location.origin}${window.location.pathname}#/family-setup?code=${inviteCode}`;
+  const inviteCode = familyObj?.code || currentUser?.familyCode || '...';
+  const inviteUrl = `${window.location.origin}${window.location.pathname}#/family-setup?code=${encodeURIComponent(inviteCode)}`;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(inviteCode);

@@ -282,6 +282,80 @@ export const cloudApi = {
     }
   },
 
+  // Fetch members for a family from Supabase
+  async fetchMembers(familyId) {
+    if (!isSupabaseConfigured || !familyId) return [];
+    try {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('family_id', familyId);
+
+      if (error || !data) return [];
+
+      return data.map(m => ({
+        id: m.id,
+        familyId: m.family_id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        avatar: m.avatar,
+        level: m.level,
+        totalXP: m.total_xp,
+        coins: m.coins,
+        weeklyPoints: m.weekly_points,
+        monthlyPoints: m.monthly_points,
+        currentStreak: m.current_streak
+      }));
+    } catch (err) {
+      console.error('Error fetching members from Supabase:', err);
+      return [];
+    }
+  },
+
+  // Fetch tasks for a family from Supabase
+  async fetchTasks(familyId) {
+    if (!isSupabaseConfigured || !familyId) return [];
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('family_id', familyId);
+
+      if (error || !data) return [];
+
+      return data.map(t => ({
+        id: t.id,
+        familyId: t.family_id,
+        title: t.title,
+        description: t.description,
+        icon: t.icon,
+        points: t.points,
+        difficulty: t.difficulty,
+        frequency: t.frequency,
+        assignedTo: t.assigned_to || [],
+        requiresPhoto: t.requires_photo,
+        requiresAdminVerification: t.requires_admin_verification,
+        status: t.status,
+        completedBy: t.completed_by,
+        completedAt: t.completed_at,
+        approvedBy: t.approved_by,
+        approvedAt: t.approved_at,
+        rejectionReason: t.rejection_reason,
+        photoUrl: t.photo_url,
+        comment: t.comment,
+        customDays: t.custom_days || [],
+        isRotative: t.is_rotative,
+        requireOtherAdmin: t.require_other_admin,
+        timeLimit: t.time_limit,
+        bonusPoints: t.bonus_points
+      }));
+    } catch (err) {
+      console.error('Error fetching tasks from Supabase:', err);
+      return [];
+    }
+  },
+
   // Purge legacy test data
   async purgeAllCloudData() {
     try {
