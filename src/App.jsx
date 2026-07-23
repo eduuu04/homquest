@@ -31,7 +31,34 @@ const RequireFamily = ({ children }) => {
 
 const AppContent = () => {
   const location = useLocation();
-  const { currentUser } = useFamily();
+  const { currentUser, cloudReady } = useFamily();
+
+  // Block rendering until first cloud sync completes
+  if (!cloudReady) {
+    return (
+      <div style={{
+        minHeight: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
+        color: 'white',
+        gap: '1rem'
+      }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          border: '4px solid rgba(255,255,255,0.2)',
+          borderTopColor: '#a78bfa',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>Sincronizando con la nube...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   // Hide TabBar on auth and family-setup pages
   const hideTabBarPaths = ['/login', '/register', '/family-setup'];

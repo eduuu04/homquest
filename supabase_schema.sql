@@ -144,3 +144,24 @@ CREATE POLICY "Update Task Photos" ON storage.objects
 
 CREATE POLICY "Delete Task Photos" ON storage.objects
     FOR DELETE USING (bucket_id = 'task-proofs');
+
+-- 11. SUPABASE REALTIME (para sincronización instantánea entre dispositivos)
+DO $$
+BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.families; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.members; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.rewards; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.claimed_rewards; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_log; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications; EXCEPTION WHEN duplicate_object THEN NULL; END;
+END $$;
+
+-- REPLICA IDENTITY FULL para recibir datos completos en eventos DELETE
+ALTER TABLE public.families REPLICA IDENTITY FULL;
+ALTER TABLE public.members REPLICA IDENTITY FULL;
+ALTER TABLE public.tasks REPLICA IDENTITY FULL;
+ALTER TABLE public.rewards REPLICA IDENTITY FULL;
+ALTER TABLE public.claimed_rewards REPLICA IDENTITY FULL;
+ALTER TABLE public.activity_log REPLICA IDENTITY FULL;
+ALTER TABLE public.notifications REPLICA IDENTITY FULL;
