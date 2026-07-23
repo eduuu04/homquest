@@ -1,23 +1,35 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Default Supabase project configuration (Can be overridden via .env file)
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+const getEnvVar = (key) => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+      return import.meta.env[key];
+    }
+  } catch (e) {}
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key];
+    }
+  } catch (e) {}
+  return '';
+};
+
+// HomQuest Production Supabase Cloud Credentials
+const DEFAULT_SUPABASE_URL = 'https://boudgmhevayakohouiqg.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_cVkRn_uF8hkjt3YbE5tdJA_S7Y6VTkY';
+
+const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL') || DEFAULT_SUPABASE_URL;
+const SUPABASE_ANON_KEY = getEnvVar('VITE_SUPABASE_ANON_KEY') || getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY') || DEFAULT_SUPABASE_KEY;
 
 export const isSupabaseConfigured = Boolean(
   SUPABASE_URL && 
   SUPABASE_ANON_KEY && 
-  !SUPABASE_URL.includes('xyzcompany') && 
-  !SUPABASE_ANON_KEY.includes('placeholder_key')
+  !SUPABASE_URL.includes('xyzcompany')
 );
 
-// Fallback safety client
-const dummyUrl = 'https://placeholder.supabase.co';
-const dummyKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder';
-
 export const supabase = createClient(
-  isSupabaseConfigured ? SUPABASE_URL : dummyUrl,
-  isSupabaseConfigured ? SUPABASE_ANON_KEY : dummyKey,
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
   {
     auth: { persistSession: true },
     realtime: { params: { eventsPerSecond: 10 } }
@@ -25,4 +37,3 @@ export const supabase = createClient(
 );
 
 export const STORAGE_BUCKET = 'task-proofs';
-

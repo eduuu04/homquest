@@ -1,8 +1,8 @@
-import { supabase, STORAGE_BUCKET, isSupabaseConfigured } from './supabase';
+import { supabase, STORAGE_BUCKET, isSupabaseConfigured } from './supabase.js';
 
 /**
- * HomQuest Supabase Cloud API Service v2.0
- * 24/7 Serverless Cloud Service for Database and Storage (Task Photos)
+ * HomQuest Supabase Cloud API Service v3.0
+ * 24/7 Real-Time Cloud Service for Database and Storage (Task Photos)
  */
 
 export const sanitizeCode = (c) => {
@@ -16,7 +16,6 @@ export const cloudApi = {
     try {
       if (!file) return null;
 
-      // If Supabase is configured with real credentials
       if (isSupabaseConfigured) {
         const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
         const filePath = `proofs/${taskId}_${Date.now()}.${fileExt}`;
@@ -40,7 +39,6 @@ export const cloudApi = {
       console.warn('Falling back to local DataURL for photo preview:', err);
     }
 
-    // Local fallback: Convert to Data URL (base64) for offline / local preview
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
@@ -70,7 +68,7 @@ export const cloudApi = {
     }
   },
 
-  // Register family in Supabase 24/7 Cloud Database
+  // Register / Sync family in Supabase 24/7 Cloud Database
   async registerFamily(family) {
     try {
       if (!family || !family.code) return family;
@@ -81,37 +79,40 @@ export const cloudApi = {
       const entry = {
         id: family.id,
         name: family.name,
-        icon: family.icon,
+        icon: family.icon || '🏠',
         code: cleanCode,
         sanitized_code: sanitized,
-        created_at: new Date().toISOString()
+        created_at: family.created_at || new Date().toISOString()
       };
 
-      // 1. Save to Local Shared Registry for instant access
-      try {
-        const existingStr = localStorage.getItem('hq_global_families');
-        const existing = existingStr ? JSON.parse(existingStr) : [];
-        const map = new Map();
-        existing.forEach(f => map.set(f.id, f));
-        map.set(family.id, { id: entry.id, name: entry.name, icon: entry.icon, code: entry.code, sanitizedCode: sanitized });
-        localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
-
-        if (typeof BroadcastChannel !== 'undefined') {
-          const bc = new BroadcastChannel('hq_family_sync');
-          bc.postMessage({ type: 'FAMILY_REGISTERED', family: entry });
-          bc.close();
-        }
-      } catch (e) {}
-
-      // 2. Publish to Supabase Cloud DB
       if (isSupabaseConfigured) {
-        await supabase.from('families').upsert([entry], { onConflict: 'id' });
+        const { error } = await supabase.from('families').upsert([entry], { onConflict: 'id' });
+        if (error) console.error('Error upserting family to Supabase:', error);
       }
 
       return entry;
     } catch (err) {
       console.error('Error registering family in Supabase:', err);
       return family;
+    }
+  },
+
+  // Fetch all families from Supabase Cloud
+  async fetchFamilies() {
+    if (!isSupabaseConfigured) return [];
+    try {
+      const { data, error } = await supabase.from('families').select('*');
+      if (error || !data) return [];
+      return data.map(f => ({
+        id: f.id,
+        name: f.name,
+        icon: f.icon,
+        code: f.code,
+        sanitizedCode: f.sanitized_code
+      }));
+    } catch (err) {
+      console.error('Error fetching families from Supabase:', err);
+      return [];
     }
   },
 
@@ -122,20 +123,6 @@ export const cloudApi = {
       const cleanCode = code.trim().toUpperCase();
       const targetSanitized = sanitizeCode(cleanCode);
 
-      // 1. Check Local Registry first for instant response
-      try {
-        const savedGlobal = localStorage.getItem('hq_global_families');
-        if (savedGlobal) {
-          const globalList = JSON.parse(savedGlobal);
-          const found = globalList.find(f => 
-            sanitizeCode(f.code) === targetSanitized || 
-            (f.code && f.code.trim().toUpperCase() === cleanCode)
-          );
-          if (found) return found;
-        }
-      } catch (e) {}
-
-      // 2. Query Supabase Cloud Database
       if (isSupabaseConfigured) {
         const { data: exactMatch, error: err1 } = await supabase
           .from('families')
@@ -144,10 +131,7 @@ export const cloudApi = {
           .maybeSingle();
 
         if (exactMatch && !err1) {
-          const familyObj = { id: exactMatch.id, name: exactMatch.name, icon: exactMatch.icon, code: exactMatch.code };
-          // Cache in local registry
-          this._cacheFamilyLocally(familyObj);
-          return familyObj;
+          return { id: exactMatch.id, name: exactMatch.name, icon: exactMatch.icon, code: exactMatch.code };
         }
 
         const { data: allFamilies, error: err2 } = await supabase
@@ -160,9 +144,7 @@ export const cloudApi = {
             (f.sanitized_code && f.sanitized_code === targetSanitized)
           );
           if (found) {
-            const familyObj = { id: found.id, name: found.name, icon: found.icon, code: found.code };
-            this._cacheFamilyLocally(familyObj);
-            return familyObj;
+            return { id: found.id, name: found.name, icon: found.icon, code: found.code };
           }
         }
       }
@@ -174,37 +156,11 @@ export const cloudApi = {
     }
   },
 
-  // Cache family in localStorage for instant access across tabs
-  _cacheFamilyLocally(familyObj) {
-    try {
-      const savedGlobal = localStorage.getItem('hq_global_families');
-      const existing = savedGlobal ? JSON.parse(savedGlobal) : [];
-      const map = new Map();
-      existing.forEach(f => map.set(f.id, f));
-      map.set(familyObj.id, familyObj);
-      localStorage.setItem('hq_global_families', JSON.stringify(Array.from(map.values())));
-    } catch (e) {}
-  },
-
   // Irreversibly delete a family from Supabase Cloud DB
-  async deleteFamily(familyId, code) {
+  async deleteFamily(familyId) {
     try {
-      if (!familyId) return;
-
-      // 1. Remove from Local Registry
-      try {
-        const savedGlobal = localStorage.getItem('hq_global_families');
-        if (savedGlobal) {
-          const list = JSON.parse(savedGlobal);
-          const filtered = list.filter(f => f.id !== familyId && (code ? f.code !== code.trim().toUpperCase() : true));
-          localStorage.setItem('hq_global_families', JSON.stringify(filtered));
-        }
-      } catch (e) {}
-
-      // 2. Remove from Supabase Cloud DB
-      if (isSupabaseConfigured) {
-        await supabase.from('families').delete().eq('id', familyId);
-      }
+      if (!familyId || !isSupabaseConfigured) return;
+      await supabase.from('families').delete().eq('id', familyId);
     } catch (err) {
       console.error('Error deleting family from Supabase:', err);
     }
@@ -216,11 +172,11 @@ export const cloudApi = {
     try {
       const payload = {
         id: task.id,
-        family_id: task.familyId,
+        family_id: task.familyId || null,
         title: task.title,
         description: task.description || '',
         icon: task.icon || '📋',
-        points: task.points || 0,
+        points: Number(task.points || 0),
         difficulty: task.difficulty || 'easy',
         frequency: task.frequency || 'daily',
         assigned_to: task.assignedTo || [],
@@ -238,10 +194,11 @@ export const cloudApi = {
         is_rotative: !!task.isRotative,
         require_other_admin: !!task.requireOtherAdmin,
         time_limit: task.timeLimit || '',
-        bonus_points: task.bonusPoints || 0
+        bonus_points: Number(task.bonusPoints || 0)
       };
 
-      await supabase.from('tasks').upsert([payload], { onConflict: 'id' });
+      const { error } = await supabase.from('tasks').upsert([payload], { onConflict: 'id' });
+      if (error) console.error('Error syncing task to Supabase:', error);
     } catch (err) {
       console.error('Error syncing task to Supabase:', err);
     }
@@ -263,34 +220,34 @@ export const cloudApi = {
     try {
       const payload = {
         id: member.id,
-        family_id: member.familyId,
+        family_id: member.familyId || null,
         name: member.name,
         email: member.email,
         role: member.role || 'member',
         avatar: member.avatar || '👤',
-        level: member.level || 1,
-        total_xp: member.totalXP || 0,
-        coins: member.coins || 0,
-        weekly_points: member.weeklyPoints || 0,
-        monthly_points: member.monthlyPoints || 0,
-        current_streak: member.currentStreak || 0
+        level: Number(member.level || 1),
+        total_xp: Number(member.totalXP || 0),
+        coins: Number(member.coins || 0),
+        weekly_points: Number(member.weeklyPoints || 0),
+        monthly_points: Number(member.monthlyPoints || 0),
+        current_streak: Number(member.currentStreak || 0)
       };
 
-      await supabase.from('members').upsert([payload], { onConflict: 'id' });
+      const { error } = await supabase.from('members').upsert([payload], { onConflict: 'id' });
+      if (error) console.error('Error syncing member to Supabase:', error);
     } catch (err) {
       console.error('Error syncing member to Supabase:', err);
     }
   },
 
-  // Fetch members for a family from Supabase
-  async fetchMembers(familyId) {
-    if (!isSupabaseConfigured || !familyId) return [];
+  // Fetch all members from Supabase Cloud
+  async fetchMembers(familyId = null) {
+    if (!isSupabaseConfigured) return [];
     try {
-      const { data, error } = await supabase
-        .from('members')
-        .select('*')
-        .eq('family_id', familyId);
+      let query = supabase.from('members').select('*');
+      if (familyId) query = query.eq('family_id', familyId);
 
+      const { data, error } = await query;
       if (error || !data) return [];
 
       return data.map(m => ({
@@ -313,15 +270,14 @@ export const cloudApi = {
     }
   },
 
-  // Fetch tasks for a family from Supabase
-  async fetchTasks(familyId) {
-    if (!isSupabaseConfigured || !familyId) return [];
+  // Fetch all tasks from Supabase Cloud
+  async fetchTasks(familyId = null) {
+    if (!isSupabaseConfigured) return [];
     try {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('family_id', familyId);
+      let query = supabase.from('tasks').select('*');
+      if (familyId) query = query.eq('family_id', familyId);
 
+      const { data, error } = await query;
       if (error || !data) return [];
 
       return data.map(t => ({
@@ -356,15 +312,193 @@ export const cloudApi = {
     }
   },
 
-  // Purge legacy test data
-  async purgeAllCloudData() {
+  // Save/Update Reward in Supabase Cloud
+  async syncReward(reward) {
+    if (!isSupabaseConfigured || !reward) return;
     try {
-      if (isSupabaseConfigured) {
-        await supabase.from('families').delete().neq('id', '0');
-        await supabase.from('members').delete().neq('id', '0');
-        await supabase.from('tasks').delete().neq('id', '0');
-      }
-      localStorage.removeItem('hq_global_families');
-    } catch (e) {}
+      const payload = {
+        id: reward.id,
+        family_id: reward.familyId || null,
+        title: reward.title,
+        description: reward.description || '',
+        cost: Number(reward.cost || 100),
+        icon: reward.icon || '🎁'
+      };
+      await supabase.from('rewards').upsert([payload], { onConflict: 'id' });
+    } catch (err) {
+      console.error('Error syncing reward to Supabase:', err);
+    }
+  },
+
+  // Delete Reward in Supabase Cloud
+  async deleteReward(rewardId) {
+    if (!isSupabaseConfigured || !rewardId) return;
+    try {
+      await supabase.from('rewards').delete().eq('id', rewardId);
+    } catch (err) {
+      console.error('Error deleting reward from Supabase:', err);
+    }
+  },
+
+  // Fetch Rewards from Supabase Cloud
+  async fetchRewards(familyId = null) {
+    if (!isSupabaseConfigured) return [];
+    try {
+      let query = supabase.from('rewards').select('*');
+      if (familyId) query = query.eq('family_id', familyId);
+
+      const { data, error } = await query;
+      if (error || !data) return [];
+
+      return data.map(r => ({
+        id: r.id,
+        familyId: r.family_id,
+        title: r.title,
+        description: r.description,
+        cost: r.cost,
+        icon: r.icon
+      }));
+    } catch (err) {
+      console.error('Error fetching rewards from Supabase:', err);
+      return [];
+    }
+  },
+
+  // Save/Update Claimed Reward in Supabase Cloud
+  async syncClaimedReward(claim) {
+    if (!isSupabaseConfigured || !claim) return;
+    try {
+      const payload = {
+        id: claim.id,
+        family_id: claim.familyId || null,
+        reward_id: claim.rewardId || null,
+        title: claim.title,
+        icon: claim.icon || '🎁',
+        cost: Number(claim.cost || 0),
+        claimed_by: claim.claimedBy,
+        claimed_at: claim.claimedAt || new Date().toISOString(),
+        status: claim.status || 'pending',
+        fulfilled_at: claim.fulfilledAt || null,
+        fulfilled_by: claim.fulfilledBy || null
+      };
+      await supabase.from('claimed_rewards').upsert([payload], { onConflict: 'id' });
+    } catch (err) {
+      console.error('Error syncing claimed reward to Supabase:', err);
+    }
+  },
+
+  // Fetch Claimed Rewards from Supabase Cloud
+  async fetchClaimedRewards(familyId = null) {
+    if (!isSupabaseConfigured) return [];
+    try {
+      let query = supabase.from('claimed_rewards').select('*');
+      if (familyId) query = query.eq('family_id', familyId);
+
+      const { data, error } = await query;
+      if (error || !data) return [];
+
+      return data.map(c => ({
+        id: c.id,
+        familyId: c.family_id,
+        rewardId: c.reward_id,
+        title: c.title,
+        icon: c.icon,
+        cost: c.cost,
+        claimedBy: c.claimed_by,
+        claimedAt: c.claimed_at,
+        status: c.status,
+        fulfilledAt: c.fulfilled_at,
+        fulfilledBy: c.fulfilled_by
+      }));
+    } catch (err) {
+      console.error('Error fetching claimed rewards from Supabase:', err);
+      return [];
+    }
+  },
+
+  // Save Activity Log to Supabase Cloud
+  async syncActivityLog(log) {
+    if (!isSupabaseConfigured || !log) return;
+    try {
+      const payload = {
+        id: log.id,
+        family_id: log.familyId || null,
+        type: log.type,
+        member_id: log.memberId || null,
+        details: log.details || '',
+        points_earned: Number(log.pointsEarned || 0),
+        timestamp: log.timestamp || new Date().toISOString()
+      };
+      await supabase.from('activity_log').upsert([payload], { onConflict: 'id' });
+    } catch (err) {
+      console.error('Error syncing activity log to Supabase:', err);
+    }
+  },
+
+  // Fetch Activity Log from Supabase Cloud
+  async fetchActivityLog(familyId = null) {
+    if (!isSupabaseConfigured) return [];
+    try {
+      let query = supabase.from('activity_log').select('*');
+      if (familyId) query = query.eq('family_id', familyId);
+
+      const { data, error } = await query;
+      if (error || !data) return [];
+
+      return data.map(l => ({
+        id: l.id,
+        familyId: l.family_id,
+        type: l.type,
+        memberId: l.member_id,
+        details: l.details,
+        pointsEarned: l.points_earned,
+        timestamp: l.timestamp
+      }));
+    } catch (err) {
+      console.error('Error fetching activity log from Supabase:', err);
+      return [];
+    }
+  },
+
+  // Save Notification to Supabase Cloud
+  async syncNotification(notif) {
+    if (!isSupabaseConfigured || !notif) return;
+    try {
+      const payload = {
+        id: notif.id,
+        family_id: notif.familyId || null,
+        title: notif.title,
+        message: notif.message,
+        read: !!notif.read,
+        date: notif.date || new Date().toISOString()
+      };
+      await supabase.from('notifications').upsert([payload], { onConflict: 'id' });
+    } catch (err) {
+      console.error('Error syncing notification to Supabase:', err);
+    }
+  },
+
+  // Fetch Notifications from Supabase Cloud
+  async fetchNotifications(familyId = null) {
+    if (!isSupabaseConfigured) return [];
+    try {
+      let query = supabase.from('notifications').select('*');
+      if (familyId) query = query.eq('family_id', familyId);
+
+      const { data, error } = await query;
+      if (error || !data) return [];
+
+      return data.map(n => ({
+        id: n.id,
+        familyId: n.family_id,
+        title: n.title,
+        message: n.message,
+        read: n.read,
+        date: n.date
+      }));
+    } catch (err) {
+      console.error('Error fetching notifications from Supabase:', err);
+      return [];
+    }
   }
 };
