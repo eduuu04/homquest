@@ -4,7 +4,7 @@ import { useFamily } from '../context/FamilyContext';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, members, joinFamily, getPendingInviteCode } = useFamily();
+  const { login, joinFamily, getPendingInviteCode } = useFamily();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
 
@@ -23,17 +23,6 @@ const Login = () => {
       navigate('/dashboard');
     } else {
       setError(result?.message || 'Error al iniciar sesión');
-    }
-  };
-
-  const handleQuickLogin = async (emailAddress) => {
-    const result = login(emailAddress);
-    if (result && result.success) {
-      const pendingCode = getPendingInviteCode();
-      if (pendingCode) {
-        await joinFamily(pendingCode);
-      }
-      navigate('/dashboard');
     }
   };
 
@@ -66,53 +55,6 @@ const Login = () => {
             Iniciar Sesión
           </button>
         </form>
-
-        {members.length > 0 && (
-          <>
-            <div className="divider" style={{ margin: '24px 0' }}></div>
-
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <span className="text-label" style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                👤 Perfiles de la Familia (Acceso Directo)
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {members.map(member => (
-                <button
-                  key={member.id}
-                  onClick={() => handleQuickLogin(member.email)}
-                  className="card card-flat"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '10px 14px',
-                    width: '100%',
-                    textAlign: 'left',
-                    border: '1.5px solid var(--border-light)',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div className={`avatar avatar-md ${member.role === 'admin' ? 'avatar-admin' : ''}`}>
-                    {member.avatar}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: '700', fontSize: '15px' }}>{member.name}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {member.role === 'admin' ? '👑 Administrador/a' : '👤 Miembro del Hogar'}
-                    </div>
-                  </div>
-                  <div className="badge badge-reward">
-                    Nivel {member.level}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
       </div>
 
       <div className="auth-footer mt-6">

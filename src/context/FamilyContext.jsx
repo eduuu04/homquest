@@ -209,17 +209,13 @@ export const FamilyProvider = ({ children }) => {
     if (!cloudReady || !autoLoginEnabled || currentUser || members.length === 0) return;
 
     const savedUserStr = localStorage.getItem('hq_last_user');
-    let matchedUser = null;
     if (savedUserStr) {
       try {
         const parsed = JSON.parse(savedUserStr);
-        matchedUser = members.find(m => m.id === parsed.id || m.email === parsed.email);
-      } catch (e) {
-        matchedUser = null;
-      }
+        const matchedUser = members.find(m => m.id === parsed.id || m.email === parsed.email);
+        if (matchedUser) setCurrentUser(matchedUser);
+      } catch (e) {}
     }
-    if (!matchedUser) matchedUser = members[0];
-    if (matchedUser) setCurrentUser(matchedUser);
   }, [autoLoginEnabled, members, currentUser, cloudReady]);
 
   // ========================================================================
@@ -276,6 +272,8 @@ export const FamilyProvider = ({ children }) => {
   };
 
   const logout = () => {
+    localStorage.removeItem('hq_current_user');
+    localStorage.removeItem('hq_last_user');
     setCurrentUser(null);
   };
 
