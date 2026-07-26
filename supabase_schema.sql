@@ -118,13 +118,38 @@ ALTER TABLE public.claimed_rewards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Políticas de acceso público/anon para sincronización fluida entre dispositivos
+-- ============================================================================
+-- POLÍTICAS RLS v2.0 — Acceso anon con aislamiento por family_id
+-- ============================================================================
+-- NOTA: HomQuest usa la anon key de Supabase (sin Supabase Auth / JWT).
+-- Por eso las políticas permiten acceso anon, pero el FRONTEND SIEMPRE
+-- filtra por family_id en todas las queries. Esto impide que un usuario
+-- normal vea datos de otras familias desde la app.
+--
+-- Para seguridad total a nivel de BD (impedir acceso directo con la key),
+-- migrar a Supabase Auth y usar auth.uid() en las políticas.
+-- ============================================================================
+
+-- FAMILIAS: lectura pública (necesario para buscar por código de invitación)
+-- Escritura pública (necesario para crear/unirse sin Supabase Auth)
 CREATE POLICY "Acceso total a familias" ON public.families FOR ALL USING (true) WITH CHECK (true);
+
+-- MIEMBROS: acceso total (necesario para registro y login sin Supabase Auth)
 CREATE POLICY "Acceso total a miembros" ON public.members FOR ALL USING (true) WITH CHECK (true);
+
+-- TAREAS: acceso total (el frontend SIEMPRE filtra por family_id)
 CREATE POLICY "Acceso total a tareas" ON public.tasks FOR ALL USING (true) WITH CHECK (true);
+
+-- RECOMPENSAS: acceso total (el frontend SIEMPRE filtra por family_id)
 CREATE POLICY "Acceso total a recompensas" ON public.rewards FOR ALL USING (true) WITH CHECK (true);
+
+-- CANJES: acceso total (el frontend SIEMPRE filtra por family_id)
 CREATE POLICY "Acceso total a canjes" ON public.claimed_rewards FOR ALL USING (true) WITH CHECK (true);
+
+-- ACTIVIDAD: acceso total (el frontend SIEMPRE filtra por family_id)
 CREATE POLICY "Acceso total a actividad" ON public.activity_log FOR ALL USING (true) WITH CHECK (true);
+
+-- NOTIFICACIONES: acceso total (el frontend SIEMPRE filtra por family_id)
 CREATE POLICY "Acceso total a notificaciones" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
 
 -- 10. SUPABASE STORAGE SETUP (BUCKET PARA FOTOS DE TAREAS)

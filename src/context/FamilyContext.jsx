@@ -31,6 +31,7 @@ export const FamilyProvider = ({ children }) => {
     const saved = localStorage.getItem('hq_current_user');
     return saved ? JSON.parse(saved) : null;
   });
+  const currentUserRef = useRef(currentUser);
 
   const [autoLoginEnabled, setAutoLoginEnabled] = useState(() => {
     const saved = localStorage.getItem('hq_auto_login');
@@ -68,24 +69,38 @@ export const FamilyProvider = ({ children }) => {
   const syncEverythingWithCloud = useCallback(async () => {
     if (!isSupabaseConfigured) return;
     try {
-      // Fetch EVERYTHING from cloud in parallel
-      const [
-        cloudFamilies,
-        cloudMembers,
-        cloudTasks,
-        cloudRewards,
-        cloudClaimed,
-        cloudLogs,
-        cloudNotifs
-      ] = await Promise.all([
-        cloudApi.fetchFamilies(),
-        cloudApi.fetchMembers(),
-        cloudApi.fetchTasks(),
-        cloudApi.fetchRewards(),
-        cloudApi.fetchClaimedRewards(),
-        cloudApi.fetchActivityLog(),
-        cloudApi.fetchNotifications()
-      ]);
+      const u = currentUserRef.current;
+      const fId = u?.familyId;
+
+      const cloudFamilies = await cloudApi.fetchFamilies();
+
+      let cloudMembers = [];
+      let cloudTasks = [];
+      let cloudRewards = [];
+      let cloudClaimed = [];
+      let cloudLogs = [];
+      let cloudNotifs = [];
+
+      if (fId) {
+        [
+          cloudMembers,
+          cloudTasks,
+          cloudRewards,
+          cloudClaimed,
+          cloudLogs,
+          cloudNotifs
+        ] = await Promise.all([
+          cloudApi.fetchMembers(fId),
+          cloudApi.fetchTasks(fId),
+          cloudApi.fetchRewards(fId),
+          cloudApi.fetchClaimedRewards(fId),
+          cloudApi.fetchActivityLog(fId),
+          cloudApi.fetchNotifications(fId)
+        ]);
+      } else if (u?.id) {
+        const self = await cloudApi.fetchMemberById(u.id);
+        if (self) cloudMembers = [self];
+      }
 
       // OVERWRITE local state with exact cloud state. 
       // Empty array = cloud is empty = local must be empty. NO EXCEPTIONS.
@@ -179,6 +194,7 @@ export const FamilyProvider = ({ children }) => {
   // ========================================================================
 
   useEffect(() => {
+    currentUserRef.current = currentUser;
     if (!cloudReady) return;
     if (currentUser) {
       localStorage.setItem('hq_current_user', JSON.stringify(currentUser));
@@ -222,8 +238,8 @@ export const FamilyProvider = ({ children }) => {
   // AUTH
   // ========================================================================
 
-  const login = (email) => {
-    const found = members.find(m => m.email.toLowerCase() === email.toLowerCase().trim());
+  const login = async (email) => {
+    const found = await cloudApi.fetchMemberByEmail(email);
     if (found) {
       setCurrentUser(found);
       return { success: true, user: found };

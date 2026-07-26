@@ -14,7 +14,7 @@ const Login = () => {
       setError('Por favor, introduce tu email');
       return;
     }
-    const result = login(email.trim());
+    const result = await login(email.trim());
     if (result && result.success) {
       const pendingCode = getPendingInviteCode();
       if (pendingCode) {

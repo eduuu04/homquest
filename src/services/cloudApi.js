@@ -240,12 +240,42 @@ export const cloudApi = {
     }
   },
 
+  async fetchMemberById(memberId) {
+    if (!isSupabaseConfigured || !memberId) return null;
+    try {
+      const { data, error } = await supabase.from('members').select('*').eq('id', memberId).maybeSingle();
+      if (error || !data) return null;
+      return {
+        id: data.id, familyId: data.family_id, name: data.name, email: data.email,
+        role: data.role, avatar: data.avatar, level: data.level, totalXP: data.total_xp,
+        coins: data.coins, weeklyPoints: data.weekly_points, monthlyPoints: data.monthly_points,
+        currentStreak: data.current_streak
+      };
+    } catch (err) { console.error('Error fetching member by id:', err); return null; }
+  },
+
+  async fetchMemberByEmail(email) {
+    if (!isSupabaseConfigured || !email) return null;
+    try {
+      const { data, error } = await supabase.from('members').select('*').eq('email', email.toLowerCase().trim()).maybeSingle();
+      if (error || !data) return null;
+      return {
+        id: data.id, familyId: data.family_id, name: data.name, email: data.email,
+        role: data.role, avatar: data.avatar, level: data.level, totalXP: data.total_xp,
+        coins: data.coins, weeklyPoints: data.weekly_points, monthlyPoints: data.monthly_points,
+        currentStreak: data.current_streak
+      };
+    } catch (err) { console.error('Error fetching member by email:', err); return null; }
+  },
+
   // Fetch all members from Supabase Cloud
-  async fetchMembers(familyId = null) {
+  async fetchMembers(familyId = null, memberId = null) {
     if (!isSupabaseConfigured) return [];
+    if (!familyId && !memberId) return [];
     try {
       let query = supabase.from('members').select('*');
       if (familyId) query = query.eq('family_id', familyId);
+      else if (memberId) query = query.eq('id', memberId);
 
       const { data, error } = await query;
       if (error || !data) return [];
@@ -272,10 +302,9 @@ export const cloudApi = {
 
   // Fetch all tasks from Supabase Cloud
   async fetchTasks(familyId = null) {
-    if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured || !familyId) return [];
     try {
-      let query = supabase.from('tasks').select('*');
-      if (familyId) query = query.eq('family_id', familyId);
+      let query = supabase.from('tasks').select('*').eq('family_id', familyId);
 
       const { data, error } = await query;
       if (error || !data) return [];
@@ -342,10 +371,9 @@ export const cloudApi = {
 
   // Fetch Rewards from Supabase Cloud
   async fetchRewards(familyId = null) {
-    if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured || !familyId) return [];
     try {
-      let query = supabase.from('rewards').select('*');
-      if (familyId) query = query.eq('family_id', familyId);
+      let query = supabase.from('rewards').select('*').eq('family_id', familyId);
 
       const { data, error } = await query;
       if (error || !data) return [];
@@ -389,10 +417,9 @@ export const cloudApi = {
 
   // Fetch Claimed Rewards from Supabase Cloud
   async fetchClaimedRewards(familyId = null) {
-    if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured || !familyId) return [];
     try {
-      let query = supabase.from('claimed_rewards').select('*');
-      if (familyId) query = query.eq('family_id', familyId);
+      let query = supabase.from('claimed_rewards').select('*').eq('family_id', familyId);
 
       const { data, error } = await query;
       if (error || !data) return [];
@@ -437,10 +464,9 @@ export const cloudApi = {
 
   // Fetch Activity Log from Supabase Cloud
   async fetchActivityLog(familyId = null) {
-    if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured || !familyId) return [];
     try {
-      let query = supabase.from('activity_log').select('*');
-      if (familyId) query = query.eq('family_id', familyId);
+      let query = supabase.from('activity_log').select('*').eq('family_id', familyId);
 
       const { data, error } = await query;
       if (error || !data) return [];
@@ -480,10 +506,9 @@ export const cloudApi = {
 
   // Fetch Notifications from Supabase Cloud
   async fetchNotifications(familyId = null) {
-    if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured || !familyId) return [];
     try {
-      let query = supabase.from('notifications').select('*');
-      if (familyId) query = query.eq('family_id', familyId);
+      let query = supabase.from('notifications').select('*').eq('family_id', familyId);
 
       const { data, error } = await query;
       if (error || !data) return [];

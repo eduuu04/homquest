@@ -17,7 +17,7 @@ const Register = () => {
       return;
     }
 
-    const result = register(name.trim(), email.trim(), role);
+    const result = await register(name.trim(), email.trim(), role);
     if (result && result.success) {
       const pendingCode = getPendingInviteCode();
       if (pendingCode) {
