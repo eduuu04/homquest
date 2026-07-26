@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Home, Users, Link as LinkIcon, Sparkles, ArrowLeft, ArrowRight, ShieldCheck, KeyRound, AlertCircle } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
-import { Home, Link as LinkIcon, Sparkles } from 'lucide-react';
 
 const FamilySetup = () => {
   const navigate = useNavigate();
@@ -24,10 +24,9 @@ const FamilySetup = () => {
     if (codeParam) {
       const cleanCode = codeParam.trim();
       
-      // If user is ALREADY in a family and clicks invite link for their own family -> redirect straight to Dashboard!
       if (currentUser && currentUser.familyId) {
-        const activeFamily = families.find(f => f.id === currentUser.familyId);
-        if (activeFamily && activeFamily.code.trim().toLowerCase() === cleanCode.toLowerCase()) {
+        const activeFamily = families?.find(f => f.id === currentUser.familyId);
+        if (activeFamily && activeFamily.code?.trim().toLowerCase() === cleanCode.toLowerCase()) {
           navigate('/dashboard', { replace: true });
           return;
         }
@@ -59,70 +58,76 @@ const FamilySetup = () => {
     if (res && res.success) {
       navigate('/dashboard');
     } else {
-      setError(res?.message || 'Error al unirse a la familia');
+      setError(res?.message || 'No pudimos verificar ese código de invitación.');
     }
   };
 
   const icons = ['🏠', '🏰', '🚀', '⛺', '🛸', '⛵', '🦁', '🍕', '🎉', '🍀'];
 
   return (
-    <div className="auth-page" style={{ justifyContent: 'center' }}>
-      <div className="auth-header" style={{ padding: '0 0 var(--sp-6)' }}>
-        <h1 className="auth-title" style={{ fontSize: '26px' }}>Configuración Familiar</h1>
-        <p className="auth-subtitle">
-          ¡Hola {currentUser.name}! Crea una familia nueva o únete a una existente para comenzar.
-        </p>
-      </div>
-
-      {mode === 'choice' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <button
-            onClick={() => setMode('create')}
-            className="card"
-            style={{ 
-              width: '100%', 
-              textAlign: 'center', 
-              padding: '24px 16px',
-              border: '2px solid var(--border-light)',
-              cursor: 'pointer'
-            }}
-          >
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏰</div>
-            <h3 className="text-body-bold" style={{ fontSize: '18px', color: 'var(--primary)' }}>
-              Crear una nueva familia
-            </h3>
-            <p className="text-label" style={{ fontSize: '13px', marginTop: '6px' }}>
-              Registra tu hogar, genera un código de invitación y gestiona las tareas.
-            </p>
-          </button>
-
-          <button
-            onClick={() => setMode('join')}
-            className="card"
-            style={{ 
-              width: '100%', 
-              textAlign: 'center', 
-              padding: '24px 16px',
-              border: '2px solid var(--border-light)',
-              cursor: 'pointer'
-            }}
-          >
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🔗</div>
-            <h3 className="text-body-bold" style={{ fontSize: '18px', color: 'var(--primary)' }}>
-              Unirse a una familia
-            </h3>
-            <p className="text-label" style={{ fontSize: '13px', marginTop: '6px' }}>
-              Pega el código de invitación compartido por tu administrador de la casa.
-            </p>
-          </button>
+    <div className="page pb-tab flex-center" style={{ minHeight: '100dvh', padding: 'var(--sp-6) var(--sp-4)' }}>
+      <div className="card animate-in" style={{ width: '100%', maxWidth: '520px', padding: 'var(--sp-8) var(--sp-6)' }}>
+        
+        <div className="text-center mb-6">
+          <div className="flex-center mb-3">
+            <div className="task-icon animate-pulse" style={{ width: '60px', height: '60px', borderRadius: 'var(--radius-xl)' }}>
+              <Home size={30} color="var(--primary)" />
+            </div>
+          </div>
+          <h1 className="text-display" style={{ fontSize: '1.75rem' }}>Espacio Familiar</h1>
+          <p className="text-label mt-2" style={{ fontSize: '0.95rem' }}>
+            ¡Hola, {currentUser.name}! Crea un espacio nuevo o vincúlate a un hogar ya existente.
+          </p>
         </div>
-      )}
 
-      {mode === 'create' && (
-        <form onSubmit={handleCreate} className="animate-in">
-          <div className="card" style={{ border: '1.5px solid var(--border-light)', transform: 'none' }}>
+        {mode === 'choice' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              onClick={() => setMode('create')}
+              className="card card-interactive text-center"
+              style={{ 
+                padding: 'var(--sp-6)',
+                border: '1.5px solid var(--border-light)',
+                background: 'var(--bg-card)'
+              }}
+            >
+              <div className="task-icon" style={{ width: '52px', height: '52px', margin: '0 auto 12px' }}>
+                <Home size={26} />
+              </div>
+              <h3 className="text-body-bold" style={{ fontSize: '1.1rem', color: 'var(--primary-dark)' }}>
+                Crear una nueva familia
+              </h3>
+              <p className="text-label mt-2" style={{ fontSize: '0.85rem' }}>
+                Registra tu casa, comparte un código seguro y administra las tareas.
+              </p>
+            </div>
+
+            <div
+              onClick={() => setMode('join')}
+              className="card card-interactive text-center"
+              style={{ 
+                padding: 'var(--sp-6)',
+                border: '1.5px solid var(--border-light)',
+                background: 'var(--bg-card)'
+              }}
+            >
+              <div className="task-icon" style={{ width: '52px', height: '52px', margin: '0 auto 12px', background: 'var(--reward-light)', color: 'var(--reward-dark)' }}>
+                <KeyRound size={26} />
+              </div>
+              <h3 className="text-body-bold" style={{ fontSize: '1.1rem', color: 'var(--fg-primary)' }}>
+                Unirse con un código
+              </h3>
+              <p className="text-label mt-2" style={{ fontSize: '0.85rem' }}>
+                Si alguien ya creó tu espacio familiar, introduce su código de acceso.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {mode === 'create' && (
+          <form onSubmit={handleCreate} className="animate-in">
             <div className="input-group">
-              <label className="input-label">Nombre de tu Familia</label>
+              <label className="input-label">Nombre de tu Familia o Casa</label>
               <input 
                 type="text"
                 placeholder="Ej: Los García, Piso Compartido..."
@@ -130,11 +135,12 @@ const FamilySetup = () => {
                 value={familyName}
                 onChange={(e) => setFamilyName(e.target.value)}
                 required
+                autoFocus
               />
             </div>
 
-            <div className="input-group">
-              <label className="input-label">Icono de la Familia</label>
+            <div className="input-group mt-4">
+              <label className="input-label">Emblema de la Casa</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
                 {icons.map(ic => (
                   <button
@@ -143,11 +149,11 @@ const FamilySetup = () => {
                     onClick={() => setFamilyIcon(ic)}
                     className="flex-center"
                     style={{ 
-                      fontSize: '24px', 
-                      height: '44px', 
-                      borderRadius: '12px',
+                      fontSize: '1.5rem', 
+                      height: '46px', 
+                      borderRadius: 'var(--radius-md)',
                       border: familyIcon === ic ? '2px solid var(--primary)' : '1px solid var(--border-light)',
-                      background: familyIcon === ic ? 'var(--primary-bg)' : 'transparent'
+                      background: familyIcon === ic ? 'var(--primary-bg)' : 'var(--bg-card)'
                     }}
                   >
                     {ic}
@@ -156,66 +162,57 @@ const FamilySetup = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginTop: '24px' }}>
               <button 
                 type="button" 
                 onClick={() => setMode('choice')} 
                 className="btn btn-secondary"
               >
-                Atrás
+                <ArrowLeft size={16} />
+                <span>Atrás</span>
               </button>
               <button 
                 type="submit" 
                 disabled={!familyName.trim()}
                 className="btn btn-primary"
               >
-                Crear Familia
+                <span>Crear Familia</span>
+                <ArrowRight size={16} />
               </button>
             </div>
-          </div>
-        </form>
-      )}
+          </form>
+        )}
 
-      {mode === 'join' && (
-        <form onSubmit={handleJoin} className="animate-in">
-          <div className="card" style={{ border: '1.5px solid var(--border-light)', transform: 'none' }}>
+        {mode === 'join' && (
+          <form onSubmit={handleJoin} className="animate-in">
             {error && (
-              <div 
-                style={{ 
-                  background: 'var(--error-light)', 
-                  color: 'var(--error)', 
-                  padding: '10px', 
-                  borderRadius: '8px', 
-                  fontSize: '13px', 
-                  fontWeight: 'bold',
-                  textAlign: 'center',
-                  marginBottom: '12px'
-                }}
-              >
-                {error}
+              <div className="input-error mb-4 card-flat" style={{ padding: '12px 14px', background: 'var(--error-light)', borderRadius: 'var(--radius-md)' }}>
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <span>{error}</span>
               </div>
             )}
 
             <div className="input-group">
-              <label className="input-label">Introduce el Código</label>
+              <label className="input-label">Código de Invitación</label>
               <input 
                 type="text"
-                placeholder="Ej: HOM-RVS9"
-                className="input-field"
+                placeholder="HOM-XXXX"
+                className="input-field text-center"
                 value={familyCode}
                 onChange={(e) => {
-                  setFamilyCode(e.target.value);
+                  setFamilyCode(e.target.value.toUpperCase());
                   setError('');
                 }}
                 required
-                style={{ fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center', fontSize: '18px' }}
+                autoFocus
+                style={{ fontFamily: 'monospace', letterSpacing: '2px', fontSize: '1.15rem', fontWeight: 700 }}
               />
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px', textAlign: 'center' }}>
-                Pide el código de 8 caracteres al administrador de tu hogar para vincular tu dispositivo.
-              </div>
+              <p className="text-label-sm text-center mt-2" style={{ color: 'var(--fg-tertiary)' }}>
+                Ingresa el código de 8 caracteres generado por el administrador del grupo.
+              </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginTop: '24px' }}>
               <button 
                 type="button" 
                 onClick={() => {
@@ -224,19 +221,22 @@ const FamilySetup = () => {
                 }} 
                 className="btn btn-secondary"
               >
-                Atrás
+                <ArrowLeft size={16} />
+                <span>Atrás</span>
               </button>
               <button 
                 type="submit" 
                 disabled={!familyCode.trim()}
                 className="btn btn-primary"
               >
-                Unirme
+                <span>Unirme</span>
+                <ArrowRight size={16} />
               </button>
             </div>
-          </div>
-        </form>
-      )}
+          </form>
+        )}
+
+      </div>
     </div>
   );
 };

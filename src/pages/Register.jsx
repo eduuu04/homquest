@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { User, ShieldCheck, Mail, UserPlus, ArrowRight, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const Register = () => {
@@ -7,121 +8,170 @@ const Register = () => {
   const { register, joinFamily, getPendingInviteCode } = useFamily();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('member'); // default
+  const [role, setRole] = useState('member');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) {
-      setError('Por favor, completa todos los campos');
+      setError('Por favor, completa tu nombre y correo electrónico.');
       return;
     }
 
-    const result = await register(name.trim(), email.trim(), role);
-    if (result && result.success) {
-      const pendingCode = getPendingInviteCode();
-      if (pendingCode) {
-        const joinRes = await joinFamily(pendingCode, role);
-        if (joinRes && joinRes.success) {
-          navigate('/dashboard');
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await register(name.trim(), email.trim(), role);
+      if (result && result.success) {
+        const pendingCode = getPendingInviteCode?.();
+        if (pendingCode) {
+          const joinRes = await joinFamily(pendingCode, role);
+          if (joinRes && joinRes.success) {
+            navigate('/dashboard');
+            return;
+          }
+          navigate(`/family-setup?code=${encodeURIComponent(pendingCode)}`);
           return;
         }
-        navigate(`/family-setup?code=${encodeURIComponent(pendingCode)}`);
-        return;
+        navigate('/family-setup');
+      } else {
+        setError(result?.message || 'Ocurrió un inconveniente al crear la cuenta.');
       }
-      navigate('/family-setup');
-    } else {
-      setError(result?.message || 'Error al crear la cuenta');
+    } catch (err) {
+      setError(err?.message || 'Error en el servidor. Inténtalo más tarde.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-header">
-        <div className="auth-logo">🏡</div>
-        <h1 className="auth-title">Crear Cuenta</h1>
-        <p className="auth-subtitle">Únete a la aventura de mantener el hogar limpio</p>
-      </div>
+    <div className="page pb-tab flex-center" style={{ minHeight: '100dvh', padding: 'var(--sp-6) var(--sp-4)' }}>
+      <div className="card animate-in" style={{ width: '100%', maxWidth: '480px', padding: 'var(--sp-8) var(--sp-6)' }}>
+        
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="flex-center mb-3">
+            <div className="task-icon animate-pulse" style={{ width: '60px', height: '60px', borderRadius: 'var(--radius-xl)' }}>
+              <UserPlus size={30} color="var(--primary)" />
+            </div>
+          </div>
+          <h1 className="text-display" style={{ fontSize: '1.85rem' }}>Crear Cuenta</h1>
+          <p className="text-label mt-2" style={{ fontSize: '0.95rem' }}>
+            Comienza a coordinar las tareas del hogar de forma ágil y entretenida.
+          </p>
+        </div>
 
-      <div className="auth-form">
         <form onSubmit={handleRegister}>
           {error && (
-            <div 
-              style={{ 
-                background: 'var(--error-light)', 
-                color: 'var(--error)', 
-                padding: '12px', 
-                borderRadius: '8px', 
-                fontSize: '14px', 
-                fontWeight: '600',
-                marginBottom: '16px',
-                textAlign: 'center'
-              }}
-            >
-              {error}
+            <div className="input-error mb-4 card-flat" style={{ padding: '12px 14px', background: 'var(--error-light)', borderRadius: 'var(--radius-md)' }}>
+              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
             </div>
           )}
 
           <div className="input-group">
             <label className="input-label">Tu Nombre</label>
-            <input 
-              type="text" 
-              className="input-field"
-              placeholder="Ej: Carlos"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <div style={{ position: 'relative' }}>
+              <input 
+                type="text" 
+                className="input-field"
+                placeholder="Ej: Carlos"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                style={{ paddingLeft: '2.6rem' }}
+              />
+              <User size={18} color="var(--fg-tertiary)" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
+            </div>
           </div>
 
           <div className="input-group">
-            <label className="input-label">Tu Email</label>
-            <input 
-              type="email" 
-              className="input-field"
-              placeholder="carlos@homquest.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <label className="input-label">Correo Electrónico</label>
+            <div style={{ position: 'relative' }}>
+              <input 
+                type="email" 
+                className="input-field"
+                placeholder="carlos@ejemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{ paddingLeft: '2.6rem' }}
+              />
+              <Mail size={18} color="var(--fg-tertiary)" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
+            </div>
           </div>
 
-          <div className="input-group">
-            <label className="input-label">Rol en la casa</label>
+          {/* Role selector */}
+          <div className="input-group mt-2">
+            <label className="input-label">Rol en el Hogar</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button
-                type="button"
-                className={`btn ${role === 'member' ? 'btn-primary' : 'btn-secondary'}`}
+              <div
+                className={`card card-flat card-interactive text-center ${role === 'member' ? 'active' : ''}`}
                 onClick={() => setRole('member')}
-                style={{ padding: '12px' }}
+                style={{
+                  padding: '14px 12px',
+                  background: role === 'member' ? 'var(--primary-bg)' : 'var(--bg-card)',
+                  borderColor: role === 'member' ? 'var(--primary)' : 'var(--border-light)'
+                }}
               >
-                👤 Miembro
-              </button>
-              <button
-                type="button"
-                className={`btn ${role === 'admin' ? 'btn-primary' : 'btn-secondary'}`}
+                <User size={24} color={role === 'member' ? 'var(--primary)' : 'var(--fg-secondary)'} style={{ margin: '0 auto 6px' }} />
+                <div className="text-body-bold" style={{ fontSize: '0.9rem', color: role === 'member' ? 'var(--primary-dark)' : 'var(--fg-primary)' }}>
+                  Miembro
+                </div>
+              </div>
+
+              <div
+                className={`card card-flat card-interactive text-center ${role === 'admin' ? 'active' : ''}`}
                 onClick={() => setRole('admin')}
-                style={{ padding: '12px' }}
+                style={{
+                  padding: '14px 12px',
+                  background: role === 'admin' ? 'var(--primary-bg)' : 'var(--bg-card)',
+                  borderColor: role === 'admin' ? 'var(--primary)' : 'var(--border-light)'
+                }}
               >
-                👑 Administrador
-              </button>
+                <ShieldCheck size={24} color={role === 'admin' ? 'var(--primary)' : 'var(--fg-secondary)'} style={{ margin: '0 auto 6px' }} />
+                <div className="text-body-bold" style={{ fontSize: '0.9rem', color: role === 'admin' ? 'var(--primary-dark)' : 'var(--fg-primary)' }}>
+                  Administrador
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px', textAlign: 'center' }}>
+
+            <p className="text-label-sm text-center mt-2" style={{ color: 'var(--fg-tertiary)' }}>
               {role === 'admin' 
-                ? 'Los administradores pueden crear tareas y verificar el trabajo.' 
-                : 'Los miembros completan las tareas asignadas para ganar recompensas.'}
-            </div>
+                ? 'Podrás crear tareas, revisar entregas y administrar miembros.' 
+                : 'Podrás realizar tareas asignadas y sumar puntos XP.'}
+            </p>
           </div>
 
-          <button type="submit" className="btn btn-primary btn-lg mt-4">
-            Registrarse y Entrar
+          <button type="submit" className="btn btn-primary btn-lg mt-4" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 size={20} className="animate-pulse" />
+                <span>Creando cuenta...</span>
+              </>
+            ) : (
+              <>
+                <span>Registrarse y Entrar</span>
+                <ArrowRight size={18} />
+              </>
+            )}
           </button>
         </form>
-      </div>
 
-      <div className="auth-footer mt-6">
-        <span>¿Ya tienes cuenta? </span>
-        <button onClick={() => navigate('/login')} className="auth-link">
-          Iniciar Sesión
-        </button>
+        <div className="text-center mt-6 text-label" style={{ fontSize: '0.9rem' }}>
+          <span>¿Ya tienes cuenta? </span>
+          <button 
+            type="button"
+            onClick={() => navigate('/login')} 
+            className="section-link"
+            style={{ fontWeight: 700, borderBottom: '1.5px solid var(--primary-light)' }}
+          >
+            Iniciar Sesión
+          </button>
+        </div>
+
       </div>
     </div>
   );

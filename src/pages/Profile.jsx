@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Award, ShoppingBag, Flame, Star, Trophy, ShieldAlert, Check, Edit2, X } from 'lucide-react';
+import { Award, ShoppingBag, Flame, Star, Trophy, Check, Edit2, X, Coins, Gift, ShieldCheck, User } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const AVATAR_OPTIONS = [
@@ -8,22 +8,12 @@ const AVATAR_OPTIONS = [
   { id: 'av2', emoji: '🥷', name: 'Ninja' },
   { id: 'av3', emoji: '👩‍🚀', name: 'Astronauta' },
   { id: 'av4', emoji: '🧙‍♂️', name: 'Mago' },
-  { id: 'av5', emoji: '🕵️‍♂️', name: 'Detective' },
-  { id: 'av6', emoji: '👑', name: 'Rey' },
-  { id: 'av7', emoji: '👸', name: 'Reina' },
-  { id: 'av8', emoji: '🏴‍☠️', name: 'Pirata' },
-  { id: 'av9', emoji: '🐱', name: 'Gato Pro' },
-  { id: 'av10', emoji: '🐉', name: 'Dragón' },
-  { id: 'av11', emoji: '🤖', name: 'Robot' },
-  { id: 'av12', emoji: '🦁', name: 'León' },
-  { id: 'av13', emoji: '🦄', name: 'Unicornio' },
-  { id: 'av14', emoji: '👽', name: 'Alien' },
-  { id: 'av15', emoji: '🦊', name: 'Zorro Astuto' },
-  { id: 'av16', emoji: '🎮', name: 'Gamer' },
-  { id: 'av17', emoji: '👨‍🍳', name: 'Chef Master' },
-  { id: 'av18', emoji: '⚡', name: 'Rayo Épico' },
-  { id: 'av19', emoji: '🚀', name: 'Cohete' },
-  { id: 'av20', emoji: '🎨', name: 'Artista' }
+  { id: 'av5', emoji: '👑', name: 'Rey' },
+  { id: 'av6', emoji: '🐱', name: 'Gato Pro' },
+  { id: 'av7', emoji: '🤖', name: 'Robot' },
+  { id: 'av8', emoji: '🦁', name: 'León' },
+  { id: 'av9', emoji: '🦊', name: 'Zorro Astuto' },
+  { id: 'av10', emoji: '🎨', name: 'Artista' }
 ];
 
 const Profile = () => {
@@ -31,26 +21,20 @@ const Profile = () => {
   const location = useLocation();
   const { 
     currentUser, 
-    achievements, 
-    rewards, 
+    achievements = [], 
+    rewards = [], 
     claimReward, 
     claimedRewards = [],
     fulfillRewardClaim,
-    members,
-    levels,
+    members = [],
+    levels = [],
     updateUserAvatar
   } = useFamily();
 
-  // Tab switcher
   const [activeSubTab, setActiveSubTab] = useState('achievements'); // achievements, shop
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
-
-  const userClaimedHistory = claimedRewards.filter(c =>
-    currentUser.role === 'admin' ? true : c.claimedBy === currentUser.id
-  );
   const [claimMessage, setClaimMessage] = useState({ type: '', text: '' });
 
-  // Read URL search params to switch to shop
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
@@ -61,44 +45,50 @@ const Profile = () => {
 
   if (!currentUser) return null;
 
-  const currentLvlInfo = levels.find(l => l.level === currentUser.level) || levels[0];
+  const currentLevel = currentUser.level || 1;
+  const currentLvlInfo = levels.find(l => l.level === currentLevel) || { title: 'Explorador' };
+
+  const userClaimedHistory = claimedRewards.filter(c =>
+    currentUser.role === 'admin' ? true : c.claimedBy === currentUser.id
+  );
 
   const handleClaim = (rewardId) => {
+    if (!claimReward) return;
     const res = claimReward(rewardId);
-    if (res.success) {
-      setClaimMessage({ type: 'success', text: res.message });
+    if (res?.success) {
+      setClaimMessage({ type: 'success', text: res.message || '¡Recompensa solicitada!' });
     } else {
-      setClaimMessage({ type: 'error', text: res.message });
+      setClaimMessage({ type: 'error', text: res?.message || 'No tienes suficientes monedas.' });
     }
     setTimeout(() => setClaimMessage({ type: '', text: '' }), 3000);
   };
 
   const handleSelectAvatar = (emoji) => {
-    updateUserAvatar(emoji);
+    if (updateUserAvatar) updateUserAvatar(emoji);
     setIsAvatarModalOpen(false);
   };
 
-  // Filter achievements
   const unlockedCount = achievements.filter(ach => ach.unlockedBy?.includes(currentUser.id)).length;
 
   return (
-    <div className="page" style={{ position: 'relative' }}>
-      {/* Avatar Customization Modal Drawer (Netflix-style) */}
+    <div className="page pb-tab">
+      
+      {/* Avatar Modal */}
       {isAvatarModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAvatarModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-handle"></div>
             <div className="flex-between mb-4">
-              <h3 className="text-section" style={{ fontSize: '18px' }}>Elige tu Avatar del Hogar 🎬</h3>
+              <h3 className="text-section" style={{ fontSize: '1.15rem' }}>Elige tu Avatar</h3>
               <button onClick={() => setIsAvatarModalOpen(false)} className="btn btn-icon btn-ghost">
                 <X size={20} />
               </button>
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              Selecciona tu personaje o icono favorito para identificarte en las tareas y clasificaciones:
+            <p className="text-label-sm mb-4">
+              Selecciona tu personaje o icono favorito para identificarte:
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', maxHeight: '50dvh', overflowY: 'auto', padding: '4px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', maxHeight: '50dvh', overflowY: 'auto', padding: '4px' }}>
               {AVATAR_OPTIONS.map(av => {
                 const isSelected = currentUser.avatar === av.emoji;
                 return (
@@ -109,15 +99,14 @@ const Profile = () => {
                     style={{
                       flexDirection: 'column',
                       padding: '12px 6px',
-                      border: isSelected ? '2px solid var(--primary)' : '1.5px solid var(--border-light)',
-                      background: isSelected ? 'var(--primary-bg)' : 'var(--white)',
+                      border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-light)',
+                      background: isSelected ? 'var(--primary-bg)' : 'var(--bg-card)',
                       cursor: 'pointer',
-                      borderRadius: '16px',
-                      transition: 'all 0.2s ease'
+                      borderRadius: 'var(--radius-lg)'
                     }}
                   >
-                    <span style={{ fontSize: '32px' }}>{av.emoji}</span>
-                    <span style={{ fontSize: '11px', fontWeight: '700', marginTop: '6px', textAlign: 'center', color: 'var(--text-primary)' }}>
+                    <span style={{ fontSize: '1.8rem' }}>{av.emoji}</span>
+                    <span className="text-label-sm mt-1" style={{ fontSize: '0.68rem', textAlign: 'center' }}>
                       {av.name}
                     </span>
                   </button>
@@ -133,58 +122,72 @@ const Profile = () => {
         <div style={{ position: 'relative' }}>
           <div
             className={`avatar avatar-xl ${currentUser.role === 'admin' ? 'avatar-admin' : ''}`}
-            style={{ width: '88px', height: '88px', fontSize: '36px', marginBottom: '12px', cursor: 'pointer' }}
+            style={{ width: '84px', height: '84px', fontSize: '2.2rem', marginBottom: '12px', cursor: 'pointer' }}
             onClick={() => setIsAvatarModalOpen(true)}
             title="Cambiar Avatar"
           >
-            {currentUser.avatar}
+            {currentUser.avatar || currentUser.name?.[0]?.toUpperCase() || '?'}
           </div>
           <button
             onClick={() => setIsAvatarModalOpen(true)}
             className="btn btn-icon btn-primary"
-            style={{ position: 'absolute', bottom: '12px', right: '-4px', width: '28px', height: '28px', borderRadius: '50%' }}
+            style={{ position: 'absolute', bottom: '10px', right: '-4px', width: '28px', height: '28px' }}
             title="Editar Avatar"
           >
-            <Edit2 size={14} />
+            <Edit2 size={13} />
           </button>
         </div>
 
-        <h2 className="text-section" style={{ fontSize: '20px', marginBottom: '4px' }}>
-          {currentUser.name} {currentUser.role === 'admin' && '👑'}
+        <h2 className="text-section" style={{ fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span>{currentUser.name}</span>
+          {currentUser.role === 'admin' && <ShieldCheck size={18} color="var(--reward-dark)" />}
         </h2>
-        <div className="text-label" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
-          Nivel {currentUser.level} · {currentLvlInfo.title}
+        <div className="text-label" style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '0.88rem' }}>
+          Nivel {currentLevel} · {currentLvlInfo.title}
         </div>
       </div>
 
       {/* Mini stats row */}
       <div className="stats-row mt-4">
-        <div className="stat-card">
-          <div className="stat-value">🪙 {currentUser.coins}</div>
-          <div className="stat-label">Monedas</div>
+        <div className="stat-card primary">
+          <div className="stat-icon"><Coins size={20} /></div>
+          <div>
+            <span className="stat-value">{currentUser.coins || 0}</span>
+            <span className="stat-label">Monedas</span>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">🔥 {currentUser.currentStreak}</div>
-          <div className="stat-label">Racha Días</div>
+
+        <div className="stat-card warning">
+          <div className="stat-icon"><Flame size={20} color="var(--reward-dark)" /></div>
+          <div>
+            <span className="stat-value">{currentUser.currentStreak || currentUser.streak || 0}</span>
+            <span className="stat-label">Racha Días</span>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">🏅 {unlockedCount}</div>
-          <div className="stat-label">Logros</div>
+
+        <div className="stat-card success">
+          <div className="stat-icon"><Award size={20} color="var(--success-dark)" /></div>
+          <div>
+            <span className="stat-value">{unlockedCount}</span>
+            <span className="stat-label">Logros</span>
+          </div>
         </div>
       </div>
 
       {/* Sub Tabs Toggle */}
-      <div className="flex-center mt-6" style={{ background: 'var(--white)', borderRadius: '16px', padding: '4px', border: '1.5px solid var(--border-light)' }}>
+      <div className="flex-center mt-6" style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', padding: '4px', border: '1px solid var(--border-light)' }}>
         <button
           onClick={() => setActiveSubTab('achievements')}
           className="flex-center gap-2"
           style={{ 
             flex: 1, 
             padding: '10px', 
-            borderRadius: '12px', 
-            fontWeight: '700',
+            borderRadius: 'var(--radius-lg)', 
+            fontWeight: 700,
+            fontSize: '0.9rem',
             background: activeSubTab === 'achievements' ? 'var(--primary)' : 'transparent',
-            color: activeSubTab === 'achievements' ? 'var(--white)' : 'var(--text-secondary)'
+            color: activeSubTab === 'achievements' ? 'oklch(0.99 0 0)' : 'var(--fg-secondary)',
+            transition: 'all 0.2s ease'
           }}
         >
           <Award size={18} />
@@ -196,10 +199,12 @@ const Profile = () => {
           style={{ 
             flex: 1, 
             padding: '10px', 
-            borderRadius: '12px', 
-            fontWeight: '700',
+            borderRadius: 'var(--radius-lg)', 
+            fontWeight: 700,
+            fontSize: '0.9rem',
             background: activeSubTab === 'shop' ? 'var(--primary)' : 'transparent',
-            color: activeSubTab === 'shop' ? 'var(--white)' : 'var(--text-secondary)'
+            color: activeSubTab === 'shop' ? 'oklch(0.99 0 0)' : 'var(--fg-secondary)',
+            transition: 'all 0.2s ease'
           }}
         >
           <ShoppingBag size={18} />
@@ -213,11 +218,11 @@ const Profile = () => {
           className="animate-in mt-4" 
           style={{ 
             background: claimMessage.type === 'success' ? 'var(--success-light)' : 'var(--error-light)',
-            color: claimMessage.type === 'success' ? '#047857' : 'var(--error)',
+            color: claimMessage.type === 'success' ? 'var(--success-dark)' : 'var(--error-dark)',
             padding: '12px',
-            borderRadius: '12px',
-            fontSize: '14px',
-            fontWeight: 'bold',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.88rem',
+            fontWeight: 700,
             textAlign: 'center'
           }}
         >
@@ -226,11 +231,11 @@ const Profile = () => {
       )}
 
       {/* Active Tab Content */}
-      <div className="mt-4" style={{ marginBottom: '32px' }}>
+      <div className="mt-4">
         {activeSubTab === 'achievements' ? (
           <div>
-            <div className="flex-between mb-4">
-              <span className="text-label" style={{ fontWeight: '700' }}>
+            <div className="flex-between mb-3">
+              <span className="text-label" style={{ fontWeight: 600 }}>
                 Progreso: {unlockedCount} de {achievements.length} logros
               </span>
             </div>
@@ -241,15 +246,13 @@ const Profile = () => {
                 return (
                   <div 
                     key={ach.id}
-                    className={`achievement-card ${isUnlocked ? '' : 'achievement-locked'}`}
-                    style={{ position: 'relative', border: isUnlocked ? '1.5px solid var(--primary-light)' : '1.5px solid var(--border-light)' }}
+                    className={`achievement-card stagger-item ${isUnlocked ? '' : 'achievement-locked'}`}
+                    style={{ position: 'relative', border: isUnlocked ? '1px solid var(--primary-light)' : '1px solid var(--border-light)' }}
                     title={ach.description}
                   >
-                    <div className="achievement-icon">{ach.icon}</div>
-                    <div className="achievement-name" style={{ fontWeight: 'bold' }}>{ach.title}</div>
-                    
-                    {/* Tooltip / detail below on hover/click */}
-                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    <div className="achievement-icon">{ach.icon || '🏅'}</div>
+                    <div className="achievement-name" style={{ fontWeight: 700, fontSize: '0.85rem' }}>{ach.title}</div>
+                    <div className="text-label-sm" style={{ fontSize: '0.7rem', marginTop: '2px' }}>
                       {ach.description}
                     </div>
                   </div>
@@ -259,31 +262,32 @@ const Profile = () => {
           </div>
         ) : (
           <div>
-            <div className="flex-between mb-4">
-              <span className="text-label" style={{ fontWeight: '700' }}>
-                Tus monedas disponibles: 🪙 {currentUser.coins}
+            <div className="flex-between mb-3">
+              <span className="text-label flex-center gap-1" style={{ fontWeight: 600 }}>
+                <Coins size={14} color="var(--reward-dark)" />
+                <span>Monedas disponibles: {currentUser.coins || 0}</span>
               </span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {rewards.map(reward => {
-                const canAfford = currentUser.coins >= reward.cost;
+                const canAfford = (currentUser.coins || 0) >= reward.cost;
                 return (
-                  <div key={reward.id} className="reward-card">
-                    <div className="reward-icon">{reward.icon}</div>
+                  <div key={reward.id} className="reward-card stagger-item">
+                    <div className="reward-icon">{reward.icon || '🎁'}</div>
                     <div className="reward-info">
                       <div className="reward-title">{reward.title}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                        {reward.description}
+                      <div className="text-label-sm mb-1">{reward.description}</div>
+                      <div className="reward-cost flex-center gap-1" style={{ justifyContent: 'flex-start' }}>
+                        <Coins size={13} />
+                        <span>{reward.cost} monedas</span>
                       </div>
-                      <div className="reward-cost">🪙 {reward.cost} monedas</div>
                     </div>
                     
                     <button
                       onClick={() => handleClaim(reward.id)}
                       disabled={!canAfford}
-                      className={`btn btn-sm ${canAfford ? 'btn-success' : 'btn-secondary'}`}
-                      style={{ padding: '8px 12px' }}
+                      className={`btn btn-sm ${canAfford ? 'btn-success' : 'btn-ghost'}`}
                     >
                       {canAfford ? 'Canjear' : 'Faltan 🪙'}
                     </button>
@@ -295,8 +299,9 @@ const Profile = () => {
             {/* Claimed rewards history */}
             {userClaimedHistory.length > 0 && (
               <div className="mt-6">
-                <div className="section-title mb-3" style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                  🎁 Solicitudes de Recompensas ({userClaimedHistory.length})
+                <div className="section-title mb-3" style={{ fontSize: '1rem' }}>
+                  <Gift size={18} color="var(--primary)" />
+                  <span>Historial de Canjes ({userClaimedHistory.length})</span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -307,32 +312,31 @@ const Profile = () => {
                     return (
                       <div
                         key={claim.id}
-                        className="card card-flat"
+                        className="card card-flat stagger-item"
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '12px',
                           padding: '12px',
-                          border: isPending ? '1.5px solid var(--reward)' : '1.5px solid var(--border-light)',
-                          background: isPending ? 'rgba(245, 158, 11, 0.05)' : 'var(--white)'
+                          borderColor: isPending ? 'var(--reward)' : 'var(--border-light)',
+                          background: isPending ? 'var(--reward-light)' : 'var(--bg-card)'
                         }}
                       >
-                        <div style={{ fontSize: '28px' }}>{claim.icon}</div>
+                        <div style={{ fontSize: '1.8rem' }}>{claim.icon || '🎁'}</div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{claim.title}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            Solicitado por: <strong>{member.name}</strong> (-{claim.cost}🪙)
+                          <div className="text-body-bold" style={{ fontSize: '0.9rem' }}>{claim.title}</div>
+                          <div className="text-label-sm">
+                            Por: {member.name} (-{claim.cost} XP)
                           </div>
-                          <div style={{ fontSize: '11px', color: isPending ? 'var(--reward)' : 'var(--success)', marginTop: '2px', fontWeight: '700' }}>
-                            {isPending ? '⏳ Pendiente de entregar por Admin' : '✅ Entregado'}
+                          <div className="text-label-sm mt-1" style={{ color: isPending ? 'var(--reward-dark)' : 'var(--success-dark)', fontWeight: 700 }}>
+                            {isPending ? '⏳ En espera de entrega por Admin' : '✅ Entregado'}
                           </div>
                         </div>
 
                         {currentUser.role === 'admin' && isPending && (
                           <button
-                            onClick={() => fulfillRewardClaim(claim.id)}
+                            onClick={() => fulfillRewardClaim?.(claim.id)}
                             className="btn btn-sm btn-success flex-center gap-1"
-                            style={{ fontSize: '12px' }}
                           >
                             <Check size={14} /> Entregar
                           </button>

@@ -1,106 +1,133 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, X, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Check, X, AlertCircle, CheckCircle2, XCircle, Clock, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const AdminVerify = () => {
   const navigate = useNavigate();
-  const { tasks, members, approveTask, rejectTask, currentUser } = useFamily();
+  const { tasks = [], members = [], approveTask, verifyTask, rejectTask, currentUser, getMemberName } = useFamily();
   
-  // Rejection modal state
-  const [rejectingTaskId, setRejectingTaskId] = useState(null);
+  const [rejectingTarget, setRejectingTarget] = useState(null); // { taskId, memberId }
   const [reason, setReason] = useState('');
-  
-  // Photo modal expand state
   const [expandedPhoto, setExpandedPhoto] = useState(null);
 
   if (!currentUser || currentUser.role !== 'admin') return null;
 
-  const sentTasks = tasks.filter(t => t.status === 'sent');
+  // Extract all pending verification items across both data schemas
+  const pendingItems = [];
 
-  const getMemberName = (userId) => {
+  tasks.forEach(t => {
+    if (t.status === 'sent' || t.status === 'pending_verification') {
+      pendingItems.push({
+        task: t,
+        memberId: t.completedBy || (t.assignedTo && t.assignedTo[0]?.memberId) || (t.assignedTo && t.assignedTo[0]),
+        photoUrl: t.photoUrl || t.proofPhotoUrl || (t.assignedTo && t.assignedTo[0]?.photoUrl),
+        completedAt: t.completedAt || t.submittedAt
+      });
+    } else if (Array.isArray(t.assignedTo) && typeof t.assignedTo[0] === 'object') {
+      t.assignedTo.forEach(a => {
+        if (a.status === 'pending_verification') {
+          pendingItems.push({
+            task: t,
+            memberId: a.memberId,
+            photoUrl: a.photoUrl,
+            completedAt: a.completedAt
+          });
+        }
+      });
+    }
+  });
+
+  const getMemberInfo = (userId) => {
     const found = members.find(m => m.id === userId);
-    return found ? found.name : 'Desconocido';
+    return found || { name: getMemberName?.(userId) || 'Miembro', avatar: '?' };
   };
 
-  const getMemberAvatar = (userId) => {
-    const found = members.find(m => m.id === userId);
-    return found ? found.avatar : '?';
+  const handleApprove = (item) => {
+    if (verifyTask) {
+      verifyTask(item.task.id, item.memberId);
+    } else if (approveTask) {
+      approveTask(item.task.id, currentUser.id);
+    }
   };
 
-  const handleApprove = (taskId) => {
-    approveTask(taskId, currentUser.id);
-  };
-
-  const handleOpenReject = (taskId) => {
-    setRejectingTaskId(taskId);
+  const handleOpenReject = (item) => {
+    setRejectingTarget(item);
     setReason('');
   };
 
   const handleConfirmReject = () => {
-    if (!reason.trim()) return;
-    rejectTask(rejectingTaskId, currentUser.id, reason);
-    setRejectingTaskId(null);
+    if (!reason.trim() || !rejectingTarget) return;
+    
+    if (rejectTask.length >= 3) {
+      rejectTask(rejectingTarget.task.id, rejectingTarget.memberId, reason);
+    } else {
+      rejectTask(rejectingTarget.task.id, currentUser.id, reason);
+    }
+    
+    setRejectingTarget(null);
     setReason('');
   };
 
   const getFormattedTime = (dateStr) => {
-    if (!dateStr) return '';
+    if (!dateStr) return 'Reciente';
     const date = new Date(dateStr);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + date.toLocaleDateString();
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   return (
-    <div className="page" style={{ position: 'relative' }}>
+    <div className="page pb-tab">
+      
       {/* Expanded Photo Overlay */}
       {expandedPhoto && (
         <div 
           className="modal-overlay" 
           onClick={() => setExpandedPhoto(null)}
-          style={{ justifyContent: 'center', alignItems: 'center', background: 'rgba(0,0,0,0.85)' }}
+          style={{ justifyContent: 'center', alignItems: 'center', padding: 'var(--sp-4)' }}
         >
-          <div style={{ maxWidth: '90%', position: 'relative' }}>
+          <div style={{ maxWidth: '90%', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
             <img 
               src={expandedPhoto} 
-              alt="Ampliada" 
-              style={{ maxHeight: '80dvh', width: '100%', objectFit: 'contain', borderRadius: '16px' }}
+              alt="Prueba ampliada" 
+              style={{ maxHeight: '80dvh', width: '100%', objectFit: 'contain', borderRadius: 'var(--radius-xl)' }}
             />
             <button 
               onClick={() => setExpandedPhoto(null)} 
               className="btn btn-icon btn-danger"
-              style={{ position: 'absolute', top: '12px', right: '12px' }}
+              style={{ position: 'absolute', top: '10px', right: '10px' }}
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
         </div>
       )}
 
       {/* Rejection Modal Drawer */}
-      {rejectingTaskId && (
-        <div className="modal-overlay" onClick={() => setRejectingTaskId(null)}>
+      {rejectingTarget && (
+        <div className="modal-overlay" onClick={() => setRejectingTarget(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-handle"></div>
-            <h3 className="text-section" style={{ fontSize: '18px', marginBottom: '8px' }}>Rechazar Tarea</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              Especifica el motivo del rechazo para que el miembro sepa qué corregir.
+            <h3 className="text-section" style={{ fontSize: '1.2rem', marginBottom: '6px' }}>Rechazar Entrega</h3>
+            <p className="text-label-sm mb-4">
+              Indica el motivo del rechazo para que el miembro sepa qué corregir.
             </p>
 
             <div className="input-group">
-              <label className="input-label">Motivo del rechazo</label>
+              <label className="input-label">Motivo de rechazo</label>
               <textarea 
                 className="input-field"
-                placeholder="Ej: Aún queda polvo sobre la mesa..."
+                placeholder="Ej: Aún quedan manchas en la encimera..."
                 rows={3}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 style={{ resize: 'none' }}
+                autoFocus
               />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
               <button 
-                onClick={() => setRejectingTaskId(null)} 
+                onClick={() => setRejectingTarget(null)} 
                 className="btn btn-secondary"
               >
                 Cancelar
@@ -118,89 +145,100 @@ const AdminVerify = () => {
       )}
 
       {/* Header */}
-      <div className="page-header" style={{ paddingLeft: '0' }}>
+      <div className="page-header">
         <button onClick={() => navigate('/admin')} className="btn btn-icon btn-ghost">
-          <ArrowLeft size={24} />
+          <ArrowLeft size={22} />
         </button>
-        <h1 className="page-title" style={{ flex: 1, marginLeft: '12px' }}>Verificar Tareas</h1>
+        <h1 className="page-title" style={{ flex: 1 }}>Verificar Tareas</h1>
       </div>
 
       <div className="mt-4" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div className="text-label" style={{ fontWeight: 'bold' }}>
-          {sentTasks.length === 0 ? 'Sin tareas pendientes de revisión' : `${sentTasks.length} tareas pendientes`}
-        </div>
-
-        {sentTasks.length === 0 ? (
+        
+        {pendingItems.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-emoji">👏</div>
-            <div className="empty-state-title">¡Buen trabajo!</div>
-            <div className="empty-state-text">No hay tareas pendientes de revisión de ningún miembro de la familia.</div>
+            <div className="empty-state-icon">
+              <CheckCircle2 size={32} color="var(--success)" />
+            </div>
+            <div className="empty-state-title">¡Todo al día!</div>
+            <div className="empty-state-text">No hay entregas de tareas pendientes de revisión en este momento.</div>
           </div>
         ) : (
-          sentTasks.map(task => (
-            <div key={task.id} className="card" style={{ border: '1.5px solid var(--border-light)', transform: 'none' }}>
-              <div className="flex-between">
-                <div className="flex-center" style={{ gap: '12px' }}>
-                  <div style={{ fontSize: '32px' }}>{task.icon}</div>
-                  <div>
-                    <h3 style={{ fontWeight: '800', fontSize: '16px' }}>{task.title}</h3>
-                    <div className="flex-center" style={{ gap: '6px', justifyContent: 'flex-start', marginTop: '2px' }}>
-                      <div className="avatar avatar-sm" style={{ width: '20px', height: '20px', fontSize: '9px' }}>
-                        {getMemberAvatar(task.completedBy)}
+          pendingItems.map((item, idx) => {
+            const member = getMemberInfo(item.memberId);
+            return (
+              <div key={idx} className="card card-flat stagger-item" style={{ padding: 'var(--sp-5)' }}>
+                <div className="flex-between">
+                  <div className="flex-center gap-3">
+                    <div className="task-icon">
+                      {item.task.emoji || item.task.icon || '📋'}
+                    </div>
+                    <div>
+                      <h3 className="text-body-bold" style={{ fontSize: '1rem' }}>{item.task.title}</h3>
+                      <div className="flex-center gap-2 mt-1" style={{ justifyContent: 'flex-start' }}>
+                        <div className="avatar avatar-sm" style={{ width: '22px', height: '22px', fontSize: '10px' }}>
+                          {member.avatar || member.name?.[0]?.toUpperCase() || '?'}
+                        </div>
+                        <span className="text-label-sm">
+                          Por: <strong>{member.name}</strong>
+                        </span>
                       </div>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        por {getMemberName(task.completedBy)}
-                      </span>
                     </div>
                   </div>
+
+                  <span className="badge badge-reward">
+                    +{item.task.xp || item.task.points || 0} XP
+                  </span>
                 </div>
-                <span className="badge badge-reward">★ {task.points} monedas</span>
-              </div>
 
-              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '8px' }}>
-                Enviada: {getFormattedTime(task.completedAt)}
-              </div>
-
-              {/* Task Proof Photo */}
-              {task.photoUrl && (
-                <div className="mt-3">
-                  <div className="text-label" style={{ marginBottom: '6px' }}>Foto de prueba (Pulsa para ampliar):</div>
-                  <img 
-                    src={task.photoUrl} 
-                    alt="Prueba de tarea" 
-                    onClick={() => setExpandedPhoto(task.photoUrl)}
-                    style={{ 
-                      height: '120px', 
-                      width: '100%', 
-                      objectFit: 'cover', 
-                      borderRadius: '12px',
-                      cursor: 'pointer',
-                      border: '1.5px solid var(--border-light)'
-                    }}
-                  />
+                <div className="text-label-sm mt-2" style={{ color: 'var(--fg-tertiary)' }}>
+                  Enviado: {getFormattedTime(item.completedAt)}
                 </div>
-              )}
 
-              {/* Verify Actions */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
-                <button 
-                  onClick={() => handleOpenReject(task.id)}
-                  className="btn btn-secondary flex-center gap-1"
-                  style={{ color: 'var(--error)', background: 'var(--error-light)', padding: '10px' }}
-                >
-                  <X size={16} /> Rechazar
-                </button>
-                <button 
-                  onClick={() => handleApprove(task.id)}
-                  className="btn btn-success flex-center gap-1"
-                  style={{ padding: '10px' }}
-                >
-                  <Check size={16} /> Aprobar
-                </button>
+                {/* Proof Photo */}
+                {item.photoUrl && (
+                  <div className="mt-3">
+                    <div className="text-label-sm mb-1 flex-center gap-1" style={{ justifyContent: 'flex-start' }}>
+                      <ImageIcon size={14} />
+                      <span>Foto de prueba (Toca para ampliar):</span>
+                    </div>
+                    <img 
+                      src={item.photoUrl} 
+                      alt="Prueba de tarea" 
+                      onClick={() => setExpandedPhoto(item.photoUrl)}
+                      style={{ 
+                        height: '140px', 
+                        width: '100%', 
+                        objectFit: 'cover', 
+                        borderRadius: 'var(--radius-lg)',
+                        cursor: 'pointer',
+                        border: '1px solid var(--border-light)'
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
+                  <button 
+                    onClick={() => handleOpenReject(item)}
+                    className="btn btn-secondary flex-center gap-1"
+                    style={{ color: 'var(--error-dark)', background: 'var(--error-light)' }}
+                  >
+                    <X size={16} /> Rechazar
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleApprove(item)}
+                    className="btn btn-success flex-center gap-1"
+                  >
+                    <Check size={16} /> Aprobar
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
+
       </div>
     </div>
   );

@@ -1,28 +1,42 @@
 import React, { useState } from 'react';
+import { ClipboardList, CheckCircle2, Filter, Inbox } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 import TaskCard from '../components/TaskCard';
 
 const Tasks = () => {
-  const { tasks, currentUser } = useFamily();
+  const { tasks = [], currentUser } = useFamily();
   const [filter, setFilter] = useState('all'); // all, today, week, pending, done
 
   if (!currentUser) return null;
 
   // Filter tasks logic
   const filteredTasks = tasks.filter(task => {
-    // Basic filter: only show tasks assigned to this user
-    const isAssigned = task.assignedTo.includes(currentUser.id);
+    // Check assignment across both data models
+    let isAssigned = false;
+    if (Array.isArray(task.assignedTo)) {
+      isAssigned = task.assignedTo.some(a => (typeof a === 'object' ? a.memberId === currentUser.id : a === currentUser.id));
+    } else {
+      isAssigned = true;
+    }
+
     if (!isAssigned) return false;
+
+    // Normalize task status
+    let status = task.status || 'pending';
+    if (Array.isArray(task.assignedTo) && typeof task.assignedTo[0] === 'object') {
+      const myAssign = task.assignedTo.find(a => a.memberId === currentUser.id);
+      if (myAssign) status = myAssign.status;
+    }
 
     switch (filter) {
       case 'today':
-        return task.frequency === 'daily' && task.status !== 'approved';
+        return task.frequency === 'daily' && status !== 'approved' && status !== 'completed';
       case 'week':
-        return task.status !== 'approved';
+        return status !== 'approved' && status !== 'completed';
       case 'pending':
-        return task.status === 'pending' || task.status === 'rejected';
+        return status === 'pending' || status === 'rejected';
       case 'done':
-        return task.status === 'approved' || task.status === 'sent';
+        return status === 'approved' || status === 'completed' || status === 'sent' || status === 'pending_verification';
       case 'all':
       default:
         return true;
@@ -30,18 +44,22 @@ const Tasks = () => {
   });
 
   return (
-    <div className="page">
-      <div className="page-header" style={{ paddingBottom: '0px' }}>
-        <h1 className="page-title">Mis Tareas 📋</h1>
+    <div className="page pb-tab">
+      
+      <div className="page-header">
+        <h1 className="page-title">
+          <ClipboardList size={26} color="var(--primary)" />
+          <span>Mis Tareas</span>
+        </h1>
       </div>
 
       {/* Filter chips */}
-      <div className="chip-group mt-4">
+      <div className="chip-group mt-2">
         <button 
           onClick={() => setFilter('all')} 
           className={`chip ${filter === 'all' ? 'active' : ''}`}
         >
-          Todas
+          Todas ({tasks.length})
         </button>
         <button 
           onClick={() => setFilter('today')} 
@@ -70,12 +88,14 @@ const Tasks = () => {
       </div>
 
       {/* Tasks list */}
-      <div className="mt-4" style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: '300px' }}>
+      <div className="mt-4" style={{ minHeight: '300px' }}>
         {filteredTasks.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-emoji">🏖️</div>
-            <div className="empty-state-title">Sin tareas</div>
-            <div className="empty-state-text">No hay tareas que coincidan con este filtro.</div>
+            <div className="empty-state-icon">
+              <Inbox size={32} />
+            </div>
+            <div className="empty-state-title">Sin tareas aquí</div>
+            <div className="empty-state-text">No hay tareas asociadas al filtro seleccionado.</div>
           </div>
         ) : (
           filteredTasks.map(task => (
@@ -83,6 +103,7 @@ const Tasks = () => {
           ))
         )}
       </div>
+
     </div>
   );
 };

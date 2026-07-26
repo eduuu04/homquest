@@ -1,33 +1,31 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Edit2, ChevronDown, ChevronUp, Save, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Save, AlertTriangle, Settings as SettingsIcon, TrendingUp, Flame, Award, ShoppingBag, ShieldAlert } from 'lucide-react';
 import { useFamily } from '../context/FamilyContext';
 
 const Settings = () => {
   const navigate = useNavigate();
   const { 
-    familySettings, 
+    familySettings = {}, 
     setFamilySettings,
-    levels, addLevel, deleteLevel,
-    streaks, addStreak, deleteStreak,
-    achievements, addAchievement, deleteAchievement,
-    rewards, addReward, deleteReward,
+    levels = [], addLevel, deleteLevel,
+    streaks = [], addStreak, deleteStreak,
+    achievements = [], addAchievement, deleteAchievement,
+    rewards = [], addReward, deleteReward,
     currentUser,
     autoLoginEnabled, setAutoLoginEnabled,
-    deleteFamily, families
+    deleteFamily, families = []
   } = useFamily();
 
   // Settings states
-  const [familyName, setFamilyName] = useState(familySettings.familyName);
-  const [familyIcon, setFamilyIcon] = useState(familySettings.familyIcon);
-  const [weeklyResetDay, setWeeklyResetDay] = useState(familySettings.weeklyResetDay);
+  const [familyName, setFamilyName] = useState(familySettings.familyName || '');
+  const [familyIcon, setFamilyIcon] = useState(familySettings.familyIcon || '🏠');
+  const [weeklyResetDay, setWeeklyResetDay] = useState(familySettings.weeklyResetDay || 'Monday');
   
   // Danger Zone delete states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmCode, setDeleteConfirmCode] = useState('');
-  
-  // Collapsible sections
-  const [openSection, setOpenSection] = useState(null); // levels, streaks, achievements, rewards, null
+  const [openSection, setOpenSection] = useState(null);
 
   // Add Item Temp States
   const [newLvlNo, setNewLvlNo] = useState('');
@@ -59,7 +57,7 @@ const Settings = () => {
     if (deleteConfirmCode.trim().toUpperCase() !== currentFamilyCode.trim().toUpperCase()) {
       return;
     }
-    const res = await deleteFamily(currentUser?.familyId);
+    const res = await deleteFamily?.(currentUser?.familyId);
     if (res && res.success) {
       navigate('/family-setup', { replace: true });
     }
@@ -67,18 +65,20 @@ const Settings = () => {
 
   const handleSaveGeneral = (e) => {
     e.preventDefault();
-    setFamilySettings({
-      ...familySettings,
-      familyName,
-      familyIcon,
-      weeklyResetDay
-    });
-    alert('¡Configuración general guardada!');
+    if (setFamilySettings) {
+      setFamilySettings({
+        ...familySettings,
+        familyName,
+        familyIcon,
+        weeklyResetDay
+      });
+      alert('¡Configuración general guardada!');
+    }
   };
 
   const handleAddLevel = () => {
     if (!newLvlNo || !newLvlXP || !newLvlTitle) return;
-    addLevel({
+    addLevel?.({
       level: Number(newLvlNo),
       xpNeeded: Number(newLvlXP),
       title: newLvlTitle,
@@ -91,7 +91,7 @@ const Settings = () => {
 
   const handleAddStreak = () => {
     if (!newStreakName || !newStreakDays || !newStreakBonus) return;
-    addStreak({
+    addStreak?.({
       name: newStreakName,
       type: 'custom',
       threshold: Number(newStreakDays),
@@ -106,7 +106,7 @@ const Settings = () => {
 
   const handleAddReward = () => {
     if (!newRewardTitle || !newRewardCost) return;
-    addReward({
+    addReward?.({
       title: newRewardTitle,
       description: newRewardDesc,
       cost: Number(newRewardCost),
@@ -119,7 +119,7 @@ const Settings = () => {
 
   const handleAddAchievement = () => {
     if (!newAchTitle || !newAchCount) return;
-    addAchievement({
+    addAchievement?.({
       title: newAchTitle,
       description: newAchDesc,
       icon: newAchIcon,
@@ -137,19 +137,21 @@ const Settings = () => {
   };
 
   return (
-    <div className="page" style={{ paddingBottom: '40px' }}>
+    <div className="page pb-tab">
+      
       {/* Header */}
-      <div className="page-header" style={{ paddingLeft: '0' }}>
+      <div className="page-header">
         <button onClick={() => navigate('/admin')} className="btn btn-icon btn-ghost">
-          <ArrowLeft size={24} />
+          <ArrowLeft size={22} />
         </button>
-        <h1 className="page-title" style={{ flex: 1, marginLeft: '12px' }}>Ajustes Generales</h1>
+        <h1 className="page-title" style={{ flex: 1 }}>Configuración Familiar</h1>
       </div>
 
       {/* General Settings Card */}
-      <div className="card mb-6" style={{ border: '1.5px solid var(--border-light)', transform: 'none' }}>
-        <h3 className="text-body-bold" style={{ marginBottom: '16px' }}>Nombre e Icono de Familia</h3>
+      <div className="card mb-6 animate-in" style={{ border: '1px solid var(--border-light)' }}>
+        <h3 className="text-body-bold mb-4" style={{ fontSize: '1.05rem' }}>Ajustes del Hogar</h3>
         <form onSubmit={handleSaveGeneral}>
+          
           <div className="input-group">
             <label className="input-label">Nombre de la familia</label>
             <input 
@@ -162,7 +164,7 @@ const Settings = () => {
           </div>
 
           <div className="input-group">
-            <label className="input-label">Icono de la familia (Emoji)</label>
+            <label className="input-label">Icono emblema (Emoji)</label>
             <input 
               type="text"
               className="input-field"
@@ -186,39 +188,45 @@ const Settings = () => {
             </select>
           </div>
 
-          <div className="input-group" style={{ background: 'var(--surface-elevated)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', margin: 0 }}>
+          <div className="input-group card card-flat mb-4" style={{ padding: '12px 14px', background: 'var(--primary-bg)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', width: '100%' }}>
               <div>
-                <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>⚡ Inicio de Sesión Automático</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Mantiene la sesión iniciada al reabrir la app</div>
+                <div className="text-body-bold" style={{ fontSize: '0.9rem' }}>Inicio de Sesión Automático</div>
+                <div className="text-label-sm">Mantiene la cuenta activa en este dispositivo</div>
               </div>
               <input 
                 type="checkbox"
                 checked={autoLoginEnabled}
-                onChange={(e) => setAutoLoginEnabled(e.target.checked)}
-                style={{ width: '20px', height: '20px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                onChange={(e) => setAutoLoginEnabled?.(e.target.checked)}
+                className="toggle"
               />
             </label>
           </div>
 
           <button type="submit" className="btn btn-primary w-full flex-center gap-2">
-            <Save size={16} /> Guardar Ajustes
+            <Save size={18} />
+            <span>Guardar Ajustes</span>
           </button>
         </form>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div className="text-label" style={{ fontWeight: 'bold' }}>Personalizar Gamificación</div>
+        <div className="section-title" style={{ fontSize: '1rem' }}>
+          <span>Personalizar Sistema de Gamificación</span>
+        </div>
 
         {/* 1. LEVELS CUSTOMIZER */}
-        <div className="card" style={{ padding: '16px', transform: 'none', border: '1.5px solid var(--border-light)' }}>
+        <div className="card card-flat" style={{ padding: 'var(--sp-4)' }}>
           <button 
             type="button"
             onClick={() => toggleSection('levels')}
-            className="flex-between"
-            style={{ width: '100%', fontWeight: '800', fontSize: '15px' }}
+            className="flex-between w-full"
+            style={{ fontWeight: 700, fontSize: '0.95rem' }}
           >
-            <span>📈 Gestionar Niveles ({levels.length})</span>
+            <div className="flex-center gap-2">
+              <TrendingUp size={18} color="var(--primary)" />
+              <span>Niveles ({levels.length})</span>
+            </div>
             {openSection === 'levels' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
           
@@ -226,11 +234,11 @@ const Settings = () => {
             <div className="mt-4 animate-in">
               <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                 {levels.map(l => (
-                  <div key={l.level} className="flex-between" style={{ background: 'var(--surface)', padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}>
-                    <span>{l.icon} Lvl {l.level}: {l.title} ({l.xpNeeded} XP)</span>
+                  <div key={l.level} className="flex-between card card-flat" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+                    <span>{l.icon || '⭐'} Lvl {l.level}: {l.title} ({l.xpNeeded} XP)</span>
                     <button 
                       type="button" 
-                      onClick={() => deleteLevel(l.level)} 
+                      onClick={() => deleteLevel?.(l.level)} 
                       style={{ color: 'var(--error)' }}
                     >
                       <Trash2 size={14} />
@@ -239,16 +247,16 @@ const Settings = () => {
                 ))}
               </div>
               
-              <div className="divider"></div>
+              <div style={{ height: '1px', background: 'var(--border-light)', margin: '12px 0' }}></div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '8px' }}>
-                  <input type="number" placeholder="Lvl" className="input-field" style={{ padding: '6px' }} value={newLvlNo} onChange={(e) => setNewLvlNo(e.target.value)} />
-                  <input type="text" placeholder="Título nivel" className="input-field" style={{ padding: '6px' }} value={newLvlTitle} onChange={(e) => setNewLvlTitle(e.target.value)} />
+                  <input type="number" placeholder="Lvl" className="input-field" value={newLvlNo} onChange={(e) => setNewLvlNo(e.target.value)} />
+                  <input type="text" placeholder="Título nivel" className="input-field" value={newLvlTitle} onChange={(e) => setNewLvlTitle(e.target.value)} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <input type="number" placeholder="XP Necesaria" className="input-field" style={{ padding: '6px' }} value={newLvlXP} onChange={(e) => setNewLvlXP(e.target.value)} />
-                  <input type="text" placeholder="Emoji" className="input-field" style={{ padding: '6px' }} value={newLvlIcon} onChange={(e) => setNewLvlIcon(e.target.value)} />
+                  <input type="number" placeholder="XP Necesaria" className="input-field" value={newLvlXP} onChange={(e) => setNewLvlXP(e.target.value)} />
+                  <input type="text" placeholder="Icono Emoji" className="input-field" value={newLvlIcon} onChange={(e) => setNewLvlIcon(e.target.value)} />
                 </div>
                 <button type="button" onClick={handleAddLevel} className="btn btn-secondary btn-sm flex-center gap-1">
                   <Plus size={14} /> Añadir Nivel
@@ -258,99 +266,18 @@ const Settings = () => {
           )}
         </div>
 
-        {/* 2. STREAKS CUSTOMIZER */}
-        <div className="card" style={{ padding: '16px', transform: 'none', border: '1.5px solid var(--border-light)' }}>
-          <button 
-            type="button"
-            onClick={() => toggleSection('streaks')}
-            className="flex-between"
-            style={{ width: '100%', fontWeight: '800', fontSize: '15px' }}
-          >
-            <span>🔥 Gestionar Rachas ({streaks.length})</span>
-            {openSection === 'streaks' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-
-          {openSection === 'streaks' && (
-            <div className="mt-4 animate-in">
-              <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                {streaks.map(s => (
-                  <div key={s.id} className="flex-between" style={{ background: 'var(--surface)', padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}>
-                    <span>{s.icon} {s.name}: {s.threshold} días (+{s.bonusPercent}%)</span>
-                    <button type="button" onClick={() => deleteStreak(s.id)} style={{ color: 'var(--error)' }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="divider"></div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input type="text" placeholder="Nombre racha" className="input-field" style={{ padding: '6px' }} value={newStreakName} onChange={(e) => setNewStreakName(e.target.value)} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                  <input type="number" placeholder="Días" className="input-field" style={{ padding: '6px' }} value={newStreakDays} onChange={(e) => setNewStreakDays(e.target.value)} />
-                  <input type="number" placeholder="Bonus %" className="input-field" style={{ padding: '6px' }} value={newStreakBonus} onChange={(e) => setNewStreakBonus(e.target.value)} />
-                  <input type="text" placeholder="Emoji" className="input-field" style={{ padding: '6px' }} value={newStreakIcon} onChange={(e) => setNewStreakIcon(e.target.value)} />
-                </div>
-                <button type="button" onClick={handleAddStreak} className="btn btn-secondary btn-sm flex-center gap-1">
-                  <Plus size={14} /> Añadir Racha
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 3. ACHIEVEMENTS CUSTOMIZER */}
-        <div className="card" style={{ padding: '16px', transform: 'none', border: '1.5px solid var(--border-light)' }}>
-          <button 
-            type="button"
-            onClick={() => toggleSection('achievements')}
-            className="flex-between"
-            style={{ width: '100%', fontWeight: '800', fontSize: '15px' }}
-          >
-            <span>🏅 Gestionar Logros ({achievements.length})</span>
-            {openSection === 'achievements' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-
-          {openSection === 'achievements' && (
-            <div className="mt-4 animate-in">
-              <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                {achievements.map(a => (
-                  <div key={a.id} className="flex-between" style={{ background: 'var(--surface)', padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}>
-                    <span>{a.icon} {a.title} ({a.countNeeded} tareas)</span>
-                    <button type="button" onClick={() => deleteAchievement(a.id)} style={{ color: 'var(--error)' }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="divider"></div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input type="text" placeholder="Título del logro" className="input-field" style={{ padding: '6px' }} value={newAchTitle} onChange={(e) => setNewAchTitle(e.target.value)} />
-                <input type="text" placeholder="Descripción corta" className="input-field" style={{ padding: '6px' }} value={newAchDesc} onChange={(e) => setNewAchDesc(e.target.value)} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <input type="number" placeholder="Tareas nec." className="input-field" style={{ padding: '6px' }} value={newAchCount} onChange={(e) => setNewAchCount(e.target.value)} />
-                  <input type="text" placeholder="Emoji" className="input-field" style={{ padding: '6px' }} value={newAchIcon} onChange={(e) => setNewAchIcon(e.target.value)} />
-                </div>
-                <button type="button" onClick={handleAddAchievement} className="btn btn-secondary btn-sm flex-center gap-1">
-                  <Plus size={14} /> Añadir Logro
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 4. REWARDS SHOP CUSTOMIZER */}
-        <div className="card" style={{ padding: '16px', transform: 'none', border: '1.5px solid var(--border-light)', marginBottom: '32px' }}>
+        {/* 2. REWARDS CUSTOMIZER */}
+        <div className="card card-flat" style={{ padding: 'var(--sp-4)' }}>
           <button 
             type="button"
             onClick={() => toggleSection('rewards')}
-            className="flex-between"
-            style={{ width: '100%', fontWeight: '800', fontSize: '15px' }}
+            className="flex-between w-full"
+            style={{ fontWeight: 700, fontSize: '0.95rem' }}
           >
-            <span>🛍️ Recompensas Tienda ({rewards.length})</span>
+            <div className="flex-center gap-2">
+              <ShoppingBag size={18} color="var(--reward-dark)" />
+              <span>Tienda de Recompensas ({rewards.length})</span>
+            </div>
             {openSection === 'rewards' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
 
@@ -358,23 +285,23 @@ const Settings = () => {
             <div className="mt-4 animate-in">
               <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                 {rewards.map(r => (
-                  <div key={r.id} className="flex-between" style={{ background: 'var(--surface)', padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}>
-                    <span>{r.icon} {r.title} ({r.cost} 🪙)</span>
-                    <button type="button" onClick={() => deleteReward(r.id)} style={{ color: 'var(--error)' }}>
+                  <div key={r.id} className="flex-between card card-flat" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+                    <span>{r.icon || '🎁'} {r.title} ({r.cost} XP)</span>
+                    <button type="button" onClick={() => deleteReward?.(r.id)} style={{ color: 'var(--error)' }}>
                       <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
               </div>
 
-              <div className="divider"></div>
+              <div style={{ height: '1px', background: 'var(--border-light)', margin: '12px 0' }}></div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input type="text" placeholder="Nombre recompensa" className="input-field" style={{ padding: '6px' }} value={newRewardTitle} onChange={(e) => setNewRewardTitle(e.target.value)} />
-                <input type="text" placeholder="Descripción corta" className="input-field" style={{ padding: '6px' }} value={newRewardDesc} onChange={(e) => setNewRewardDesc(e.target.value)} />
+                <input type="text" placeholder="Nombre recompensa" className="input-field" value={newRewardTitle} onChange={(e) => setNewRewardTitle(e.target.value)} />
+                <input type="text" placeholder="Descripción corta" className="input-field" value={newRewardDesc} onChange={(e) => setNewRewardDesc(e.target.value)} />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <input type="number" placeholder="Coste en monedas" className="input-field" style={{ padding: '6px' }} value={newRewardCost} onChange={(e) => setNewRewardCost(e.target.value)} />
-                  <input type="text" placeholder="Emoji" className="input-field" style={{ padding: '6px' }} value={newRewardIcon} onChange={(e) => setNewRewardIcon(e.target.value)} />
+                  <input type="number" placeholder="Coste en monedas" className="input-field" value={newRewardCost} onChange={(e) => setNewRewardCost(e.target.value)} />
+                  <input type="text" placeholder="Icono Emoji" className="input-field" value={newRewardIcon} onChange={(e) => setNewRewardIcon(e.target.value)} />
                 </div>
                 <button type="button" onClick={handleAddReward} className="btn btn-secondary btn-sm flex-center gap-1">
                   <Plus size={14} /> Añadir Recompensa
@@ -384,55 +311,48 @@ const Settings = () => {
           )}
         </div>
 
-        {/* 5. DANGER ZONE: DELETE FAMILY */}
+        {/* 3. DANGER ZONE: DELETE FAMILY */}
         <div 
-          className="card" 
+          className="card mt-6" 
           style={{ 
-            padding: '20px', 
-            border: '2px solid var(--error)', 
-            background: 'var(--error-light)',
-            borderRadius: '16px',
-            marginTop: '32px',
-            marginBottom: '40px'
+            padding: 'var(--sp-6)', 
+            border: '1.5px solid var(--error)', 
+            background: 'var(--error-light)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)', marginBottom: '8px' }}>
+          <div className="flex-center gap-2 mb-2" style={{ justifyContent: 'flex-start', color: 'var(--error-dark)' }}>
             <AlertTriangle size={20} />
-            <h3 style={{ fontWeight: '800', fontSize: '16px', margin: 0 }}>Zona de Peligro: Borrar Familia</h3>
+            <h3 className="text-body-bold" style={{ fontSize: '1rem', color: 'var(--error-dark)' }}>Zona de Peligro</h3>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
-            Esta acción eliminará <strong>permanentemente</strong> la familia <strong>"{familySettings.familyName}"</strong> ({currentFamilyCode}), a todos sus miembros, tareas y datos acumulados. Esta acción es <strong>completamente irreversible</strong>.
+          
+          <p className="text-label-sm mb-4" style={{ color: 'var(--fg-secondary)' }}>
+            Eliminar permanentemente la familia <strong>"{familyName}"</strong> ({currentFamilyCode}) y todos sus miembros y datos. Esta acción no se puede deshacer.
           </p>
 
           {!showDeleteConfirm ? (
             <button
               type="button"
-              className="btn"
+              className="btn btn-danger w-full flex-center gap-2"
               onClick={() => setShowDeleteConfirm(true)}
-              style={{
-                background: 'var(--error)',
-                color: '#fff',
-                fontWeight: '700',
-                width: '100%',
-                padding: '12px'
-              }}
             >
-              🗑️ Borrar Familia por Completo
+              <Trash2 size={18} />
+              <span>Borrar Familia por Completo</span>
             </button>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#fff', padding: '14px', borderRadius: '12px', border: '1px solid var(--error)' }}>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--error)' }}>
+            <div className="card card-flat animate-in" style={{ padding: 'var(--sp-4)', background: 'var(--bg-card)' }}>
+              <label className="input-label" style={{ color: 'var(--error-dark)' }}>
                 Escribe el código de tu familia (<strong>{currentFamilyCode}</strong>) para confirmar:
               </label>
               <input
                 type="text"
-                className="input-field"
+                className="input-field text-center mt-2"
                 placeholder={currentFamilyCode}
                 value={deleteConfirmCode}
                 onChange={(e) => setDeleteConfirmCode(e.target.value)}
-                style={{ borderColor: 'var(--error)', textTransform: 'uppercase' }}
+                style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
               />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '14px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
@@ -445,21 +365,17 @@ const Settings = () => {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm"
+                  className="btn btn-danger btn-sm"
                   disabled={deleteConfirmCode.trim().toUpperCase() !== currentFamilyCode.trim().toUpperCase()}
                   onClick={handleDeleteFamily}
-                  style={{
-                    background: deleteConfirmCode.trim().toUpperCase() === currentFamilyCode.trim().toUpperCase() ? 'var(--error)' : '#ccc',
-                    color: '#fff',
-                    fontWeight: '800'
-                  }}
                 >
-                  ⚠️ Sí, Borrar Todo
+                  Sí, Borrar Todo
                 </button>
               </div>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );
